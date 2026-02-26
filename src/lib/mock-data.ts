@@ -13,6 +13,10 @@ export interface Tournament {
   startDate: string;
   endDate: string;
   prizePool?: string;
+  rated: boolean;
+  entryFee?: string;
+  minRating?: number;
+  maxRating?: number;
 }
 
 export interface Player {
@@ -35,6 +39,8 @@ export interface MatchResult {
   round: number;
   date: string;
   ratingChange: number;
+  tournamentId: string;
+  tournamentName: string;
 }
 
 export interface LeaderboardEntry {
@@ -46,13 +52,23 @@ export interface LeaderboardEntry {
   gamesPlayed: number;
 }
 
+export interface ArbiterVacancy {
+  id: string;
+  tournament: string;
+  date: string;
+  compensation: string;
+  status: "open" | "applied" | "filled";
+  description: string;
+}
+
 export const mockTournaments: Tournament[] = [
-  { id: "1", name: "Grand Masters Open 2026", type: "Swiss", status: "active", players: 42, maxPlayers: 64, rounds: 9, currentRound: 5, timeControl: "90+30", venue: "Metropolitan Chess Club", mode: "Offline", startDate: "2026-02-20", endDate: "2026-03-01", prizePool: "$5,000" },
-  { id: "2", name: "Weekend Blitz Championship", type: "Blitz", status: "active", players: 28, maxPlayers: 32, rounds: 11, currentRound: 7, timeControl: "3+2", venue: "Online Arena", mode: "Online", startDate: "2026-02-25", endDate: "2026-02-26" },
-  { id: "3", name: "Spring Classical Invitational", type: "Round Robin", status: "upcoming", players: 8, maxPlayers: 10, rounds: 9, currentRound: 0, timeControl: "120+30", venue: "Royal Chess Hall", mode: "Offline", startDate: "2026-03-15", endDate: "2026-03-25", prizePool: "$10,000" },
-  { id: "4", name: "Rapid Cup Series", type: "Rapid", status: "upcoming", players: 16, maxPlayers: 32, rounds: 7, currentRound: 0, timeControl: "15+10", venue: "City Convention Center", mode: "Offline", startDate: "2026-04-01", endDate: "2026-04-02" },
-  { id: "5", name: "Winter Swiss League", type: "Swiss", status: "completed", players: 56, maxPlayers: 64, rounds: 7, currentRound: 7, timeControl: "60+15", venue: "Chess Academy", mode: "Offline", startDate: "2026-01-10", endDate: "2026-01-17", prizePool: "$3,000" },
-  { id: "6", name: "Online Knockout Showdown", type: "Knockout", status: "completed", players: 32, maxPlayers: 32, rounds: 5, currentRound: 5, timeControl: "25+10", venue: "Digital Arena", mode: "Online", startDate: "2026-02-01", endDate: "2026-02-05" },
+  { id: "1", name: "Grand Masters Open 2026", type: "Swiss", status: "active", players: 42, maxPlayers: 64, rounds: 9, currentRound: 5, timeControl: "90+30", venue: "Metropolitan Chess Club", mode: "Offline", startDate: "2026-02-20", endDate: "2026-03-01", prizePool: "$5,000", rated: true, entryFee: "$50", minRating: 1800 },
+  { id: "2", name: "Weekend Blitz Championship", type: "Blitz", status: "active", players: 28, maxPlayers: 32, rounds: 11, currentRound: 7, timeControl: "3+2", venue: "Online Arena", mode: "Online", startDate: "2026-02-25", endDate: "2026-02-26", rated: true, entryFee: "$10" },
+  { id: "3", name: "Spring Classical Invitational", type: "Round Robin", status: "upcoming", players: 8, maxPlayers: 10, rounds: 9, currentRound: 0, timeControl: "120+30", venue: "Royal Chess Hall", mode: "Offline", startDate: "2026-03-15", endDate: "2026-03-25", prizePool: "$10,000", rated: true, entryFee: "$100", minRating: 2200 },
+  { id: "4", name: "Rapid Cup Series", type: "Rapid", status: "upcoming", players: 16, maxPlayers: 32, rounds: 7, currentRound: 0, timeControl: "15+10", venue: "City Convention Center", mode: "Offline", startDate: "2026-04-01", endDate: "2026-04-02", rated: false },
+  { id: "5", name: "Winter Swiss League", type: "Swiss", status: "completed", players: 56, maxPlayers: 64, rounds: 7, currentRound: 7, timeControl: "60+15", venue: "Chess Academy", mode: "Offline", startDate: "2026-01-10", endDate: "2026-01-17", prizePool: "$3,000", rated: true, entryFee: "$30" },
+  { id: "6", name: "Online Knockout Showdown", type: "Knockout", status: "completed", players: 32, maxPlayers: 32, rounds: 5, currentRound: 5, timeControl: "25+10", venue: "Digital Arena", mode: "Online", startDate: "2026-02-01", endDate: "2026-02-05", rated: false },
+  { id: "7", name: "Community Friendly Open", type: "Swiss", status: "upcoming", players: 10, maxPlayers: 40, rounds: 5, currentRound: 0, timeControl: "30+5", venue: "Community Hall", mode: "Offline", startDate: "2026-04-10", endDate: "2026-04-11", rated: false },
 ];
 
 export const mockPlayers: Player[] = [
@@ -76,11 +92,14 @@ export const mockLeaderboard: LeaderboardEntry[] = mockPlayers.map((player, i) =
 }));
 
 export const mockMatchHistory: MatchResult[] = [
-  { id: "m1", white: "You", black: "Magnus Andersson", result: "0-1", round: 1, date: "2026-02-20", ratingChange: -8 },
-  { id: "m2", white: "Elena Petrova", black: "You", result: "½-½", round: 2, date: "2026-02-21", ratingChange: 4 },
-  { id: "m3", white: "You", black: "Raj Krishnan", result: "1-0", round: 3, date: "2026-02-22", ratingChange: 12 },
-  { id: "m4", white: "Carlos Rivera", black: "You", result: "0-1", round: 4, date: "2026-02-23", ratingChange: 10 },
-  { id: "m5", white: "You", black: "Sophie Laurent", result: "1-0", round: 5, date: "2026-02-24", ratingChange: 8 },
+  { id: "m1", white: "You", black: "Magnus Andersson", result: "0-1", round: 1, date: "2026-02-20", ratingChange: -8, tournamentId: "1", tournamentName: "Grand Masters Open 2026" },
+  { id: "m2", white: "Elena Petrova", black: "You", result: "½-½", round: 2, date: "2026-02-21", ratingChange: 4, tournamentId: "1", tournamentName: "Grand Masters Open 2026" },
+  { id: "m3", white: "You", black: "Raj Krishnan", result: "1-0", round: 3, date: "2026-02-22", ratingChange: 12, tournamentId: "1", tournamentName: "Grand Masters Open 2026" },
+  { id: "m4", white: "Carlos Rivera", black: "You", result: "0-1", round: 4, date: "2026-02-23", ratingChange: 10, tournamentId: "2", tournamentName: "Weekend Blitz Championship" },
+  { id: "m5", white: "You", black: "Sophie Laurent", result: "1-0", round: 5, date: "2026-02-24", ratingChange: 8, tournamentId: "2", tournamentName: "Weekend Blitz Championship" },
+  { id: "m6", white: "James Okonkwo", black: "You", result: "½-½", round: 1, date: "2026-01-10", ratingChange: 2, tournamentId: "5", tournamentName: "Winter Swiss League" },
+  { id: "m7", white: "You", black: "Akira Tanaka", result: "1-0", round: 2, date: "2026-01-11", ratingChange: 6, tournamentId: "5", tournamentName: "Winter Swiss League" },
+  { id: "m8", white: "Lisa Müller", black: "You", result: "0-1", round: 3, date: "2026-01-12", ratingChange: 9, tournamentId: "5", tournamentName: "Winter Swiss League" },
 ];
 
 export const mockRatingHistory = [
@@ -117,3 +136,19 @@ export const mockOrganizerRequests = [
   { id: "r2", name: "Maria Santos", email: "maria@club.com", tournament: "Youth Championship", date: "2026-02-23", status: "pending" as const },
   { id: "r3", name: "Ahmed Hassan", email: "ahmed@fide.com", tournament: "Regional Qualifiers", date: "2026-02-22", status: "pending" as const },
 ];
+
+export const mockArbiterVacancies: ArbiterVacancy[] = [
+  { id: "v1", tournament: "City Open Championship 2026", date: "2026-05-01", compensation: "$200/day", status: "open", description: "Seeking experienced arbiter for a 7-round Swiss tournament with 64 players." },
+  { id: "v2", tournament: "Junior National Qualifiers", date: "2026-04-15", compensation: "$150/day", status: "open", description: "Need arbiter familiar with youth regulations for a 5-round event." },
+  { id: "v3", tournament: "Online Rapid Series Finals", date: "2026-03-20", compensation: "$100 flat", status: "applied", description: "Remote arbiter role for an online rapid tournament with anti-cheating monitoring." },
+];
+
+export const mockOrbiterPlayingStats = {
+  totalTournaments: 6,
+  activeTournaments: 1,
+  totalMatches: 32,
+  wins: 15,
+  losses: 10,
+  draws: 7,
+  currentRating: 2180,
+};

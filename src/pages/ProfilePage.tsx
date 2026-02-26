@@ -5,12 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Edit2, Save, X, User } from "lucide-react";
+import { Edit2, Save, X, User, Bell } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
 
   const profile = {
     name: "Alex Thompson",
@@ -29,9 +31,14 @@ export default function ProfilePage() {
         title="Profile"
         description="Your chess identity"
         action={
-          <Button variant={editing ? "destructive" : "default"} onClick={() => setEditing(!editing)}>
-            {editing ? <><X className="h-4 w-4 mr-1.5" /> Cancel</> : <><Edit2 className="h-4 w-4 mr-1.5" /> Edit Profile</>}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/notifications")}>
+              <Bell className="h-4 w-4 mr-1.5" /> Notifications
+            </Button>
+            <Button variant={editing ? "destructive" : "default"} size="sm" onClick={() => setEditing(!editing)}>
+              {editing ? <><X className="h-4 w-4 mr-1.5" /> Cancel</> : <><Edit2 className="h-4 w-4 mr-1.5" /> Edit Profile</>}
+            </Button>
+          </div>
         }
       />
 

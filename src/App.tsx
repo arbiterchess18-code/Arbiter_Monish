@@ -12,13 +12,15 @@ import MatchHistoryPage from "./pages/MatchHistoryPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import AchievementsPage from "./pages/AchievementsPage";
 import ProfilePage from "./pages/ProfilePage";
-import VacancyPage from "./pages/VacancyPage";
+import NotificationPreferences from "./pages/NotificationPreferences";
 import OrbiterDashboard from "./pages/OrbiterDashboard";
 import CreateTournament from "./pages/CreateTournament";
 import ManageTournaments from "./pages/ManageTournaments";
 import ResultsEntry from "./pages/ResultsEntry";
 import OrbiterStats from "./pages/OrbiterStats";
 import OrganizerRequests from "./pages/OrganizerRequests";
+import OrbiterPlayingDashboard from "./pages/OrbiterPlayingDashboard";
+import ArbiterVacanciesPage from "./pages/ArbiterVacanciesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,8 +42,8 @@ const App = () => (
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/achievements" element={<AchievementsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/vacancy" element={<VacancyPage />} />
-              {/* Orbiter Routes */}
+              <Route path="/notifications" element={<NotificationPreferences />} />
+              {/* Orbiter Conducting Routes */}
               <Route path="/orbiter" element={<OrbiterDashboard />} />
               <Route path="/orbiter/create" element={<CreateTournament />} />
               <Route path="/orbiter/manage" element={<ManageTournaments />} />
@@ -49,6 +51,11 @@ const App = () => (
               <Route path="/orbiter/leaderboards" element={<LeaderboardPage />} />
               <Route path="/orbiter/stats" element={<OrbiterStats />} />
               <Route path="/orbiter/requests" element={<OrganizerRequests />} />
+              {/* Orbiter Playing Routes */}
+              <Route path="/orbiter/playing" element={<OrbiterPlayingDashboard />} />
+              <Route path="/orbiter/my-history" element={<MatchHistoryPage />} />
+              <Route path="/orbiter/achievements" element={<AchievementsPage />} />
+              <Route path="/orbiter/vacancies" element={<ArbiterVacanciesPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
