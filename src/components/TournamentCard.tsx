@@ -23,9 +23,10 @@ interface TournamentCardProps {
   tournament: Tournament;
   index?: number;
   showJoin?: boolean;
+  onJoin?: (tournament: Tournament) => void;
 }
 
-export function TournamentCard({ tournament, index = 0, showJoin }: TournamentCardProps) {
+export function TournamentCard({ tournament, index = 0, showJoin, onJoin }: TournamentCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -42,6 +43,9 @@ export function TournamentCard({ tournament, index = 0, showJoin }: TournamentCa
             </Badge>
             <Badge variant="secondary" className={typeColors[tournament.type]}>
               {tournament.type}
+            </Badge>
+            <Badge variant={tournament.rated ? "default" : "secondary"} className="text-[10px]">
+              {tournament.rated ? "Rated" : "Unrated"}
             </Badge>
           </div>
         </div>
@@ -88,7 +92,9 @@ export function TournamentCard({ tournament, index = 0, showJoin }: TournamentCa
       )}
 
       {showJoin && tournament.status === "upcoming" && tournament.players < tournament.maxPlayers && (
-        <Button size="sm" className="mt-1 w-full">Join Tournament</Button>
+        <Button size="sm" className="mt-1 w-full" onClick={() => onJoin?.(tournament)}>
+          Join Tournament
+        </Button>
       )}
     </motion.div>
   );

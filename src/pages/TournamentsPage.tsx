@@ -1,15 +1,17 @@
+import { useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { TournamentCard } from "@/components/TournamentCard";
-import { mockTournaments } from "@/lib/mock-data";
+import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
+import { mockTournaments, Tournament } from "@/lib/mock-data";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
-import { useState } from "react";
 
 export default function TournamentsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [joinTournament, setJoinTournament] = useState<Tournament | null>(null);
 
   const filtered = mockTournaments.filter(t => {
     if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -57,10 +59,16 @@ export default function TournamentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map((t, i) => (
-            <TournamentCard key={t.id} tournament={t} index={i} showJoin />
+            <TournamentCard key={t.id} tournament={t} index={i} showJoin onJoin={setJoinTournament} />
           ))}
         </div>
       )}
+
+      <JoinTournamentDialog
+        tournament={joinTournament}
+        open={!!joinTournament}
+        onOpenChange={(open) => !open && setJoinTournament(null)}
+      />
     </div>
   );
 }
