@@ -25,6 +25,10 @@ import OrbiterStats from "./pages/OrbiterStats";
 import OrganizerRequests from "./pages/OrganizerRequests";
 import OrbiterPlayingDashboard from "./pages/OrbiterPlayingDashboard";
 import ArbiterVacanciesPage from "./pages/ArbiterVacanciesPage";
+import TournamentDetails from "./pages/TournamentDetails";
+import TournamentPairings from "./pages/TournamentPairings";
+import TournamentSummary from "./pages/TournamentSummary";
+import RegistrationFormBuilder from "./pages/RegistrationFormBuilder";
 import NotFound from "./pages/NotFound";
 import { useRole } from "@/lib/role-context";
 import { Navigate } from "react-router-dom";
@@ -36,7 +40,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const token = localStorage.getItem("authToken");
 
   if (!token) return <Navigate to="/login" replace />;
-  if (allowedRole && role !== allowedRole) return <Navigate to="/login" replace />;
+  if (allowedRole && role !== allowedRole)
+    return <Navigate to="/login" replace />;
 
   return children;
 };
@@ -59,58 +64,129 @@ const App = () => (
         <Toaster />
         <Sonner />
         <RoleProvider>
-          <BrowserRouter>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
             <Routes>
               {/* Auth Routes - No Layout */}
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 
               {/* Application Routes - With Layout */}
-              <Route path="/*" element={
-                <AppLayout>
-                  <Routes>
-                    <Route path="/" element={<HomeRedirect />} />
+              <Route
+                path="/*"
+                element={
+                  <AppLayout>
+                    <Routes>
+                      <Route path="/" element={<HomeRedirect />} />
 
-                    {/* Role Specific User Homes */}
-                    <Route path="/arbiter-userhome" element={
-                      <ProtectedRoute allowedRole="arbiter">
-                        <ArbiterDashboardPage />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/player-userhome" element={
-                      <ProtectedRoute allowedRole="player">
-                        <PlayerDashboardPage />
-                      </ProtectedRoute>
-                    } />
+                      {/* Role Specific User Homes */}
+                      <Route
+                        path="/arbiter-userhome"
+                        element={
+                          <ProtectedRoute allowedRole="arbiter">
+                            <ArbiterDashboardPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/player-userhome"
+                        element={
+                          <ProtectedRoute allowedRole="player">
+                            <PlayerDashboardPage />
+                          </ProtectedRoute>
+                        }
+                      />
 
-                    {/* Other Routes */}
-                    <Route path="/tournaments" element={<TournamentsPage />} />
-                    <Route path="/dashboard" element={<UserDashboard />} />
-                    <Route path="/history" element={<MatchHistoryPage />} />
-                    <Route path="/leaderboard" element={<LeaderboardPage />} />
-                    <Route path="/achievements" element={<AchievementsPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/notifications" element={<NotificationPreferences />} />
+                      {/* Other Routes */}
+                      <Route
+                        path="/tournaments"
+                        element={<TournamentsPage />}
+                      />
+                      <Route
+                        path="/tournament/:id"
+                        element={<TournamentDetails />}
+                      />
+                      <Route path="/dashboard" element={<UserDashboard />} />
+                      <Route path="/history" element={<MatchHistoryPage />} />
+                      <Route
+                        path="/leaderboard"
+                        element={<LeaderboardPage />}
+                      />
+                      <Route
+                        path="/achievements"
+                        element={<AchievementsPage />}
+                      />
+                      <Route path="/profile" element={<ProfilePage />} />
+                      <Route
+                        path="/notifications"
+                        element={<NotificationPreferences />}
+                      />
 
-                    {/* Orbiter Conducting Routes */}
-                    <Route path="/orbiter" element={<OrbiterDashboard />} />
-                    <Route path="/orbiter/create" element={<CreateTournament />} />
-                    <Route path="/orbiter/manage" element={<ManageTournaments />} />
-                    <Route path="/orbiter/results" element={<ResultsEntry />} />
-                    <Route path="/orbiter/leaderboards" element={<LeaderboardPage />} />
-                    <Route path="/orbiter/stats" element={<OrbiterStats />} />
-                    <Route path="/orbiter/requests" element={<OrganizerRequests />} />
+                      {/* Orbiter Conducting Routes */}
+                      <Route path="/orbiter" element={<OrbiterDashboard />} />
+                      <Route
+                        path="/orbiter/create"
+                        element={<CreateTournament />}
+                      />
+                      <Route
+                        path="/orbiter/manage"
+                        element={<ManageTournaments />}
+                      />
+                      <Route
+                        path="/orbiter/results"
+                        element={<ResultsEntry />}
+                      />
+                      <Route
+                        path="/orbiter/leaderboards"
+                        element={<LeaderboardPage />}
+                      />
+                      <Route path="/orbiter/stats" element={<OrbiterStats />} />
+                      <Route
+                        path="/orbiter/requests"
+                        element={<OrganizerRequests />}
+                      />
 
-                    {/* Orbiter Playing Routes */}
-                    <Route path="/orbiter/playing" element={<OrbiterPlayingDashboard />} />
-                    <Route path="/orbiter/my-history" element={<MatchHistoryPage />} />
-                    <Route path="/orbiter/achievements" element={<AchievementsPage />} />
-                    <Route path="/orbiter/vacancies" element={<ArbiterVacanciesPage />} />
+                      {/* Arbiter Tournament Management Routes */}
+                      <Route
+                        path="/arbiter/tournament/:id/pairings"
+                        element={<TournamentPairings />}
+                      />
+                      <Route
+                        path="/arbiter/tournament/:id/summary"
+                        element={<TournamentSummary />}
+                      />
+                      <Route
+                        path="/arbiter/tournament/:id/registration-form"
+                        element={<RegistrationFormBuilder />}
+                      />
 
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </AppLayout>
-              } />
+                      {/* Orbiter Playing Routes */}
+                      <Route
+                        path="/orbiter/playing"
+                        element={<OrbiterPlayingDashboard />}
+                      />
+                      <Route
+                        path="/orbiter/my-history"
+                        element={<MatchHistoryPage />}
+                      />
+                      <Route
+                        path="/orbiter/achievements"
+                        element={<AchievementsPage />}
+                      />
+                      <Route
+                        path="/orbiter/vacancies"
+                        element={<ArbiterVacanciesPage />}
+                      />
+
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </AppLayout>
+                }
+              />
             </Routes>
           </BrowserRouter>
         </RoleProvider>

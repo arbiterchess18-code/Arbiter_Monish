@@ -1,20 +1,51 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { TournamentCard } from "@/components/TournamentCard";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
 import { mockTournaments } from "@/lib/mock-data";
+import { getTournaments } from "@/lib/tournament-service";
+import { useNavigate } from "react-router-dom";
 
 export default function TournamentsPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [joinTournament, setJoinTournament] = useState(null);
+  const [allTournaments, setAllTournaments] = useState([]);
 
-  const filtered = mockTournaments.filter(t => {
-    if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false;
+  useEffect(() => {
+    loadTournaments();
+  }, []);
+
+  const loadTournaments = () => {
+    // Combine mock tournaments with real tournaments from service
+    const realTournaments = getTournaments();
+    const combined = [...mockTournaments, ...realTournaments];
+    setAllTournaments(combined);
+  };
+
+  const handleJoinSuccess = () => {
+    setJoinTournament(null);
+    loadTournaments();
+  };
+
+  const handleCardClick = (tournament) => {
+    navigate(`/tournament/${tournament.id}`);
+  };
+
+  const filtered = allTournaments.filter((t) => {
+    if (search && !t.name.toLowerCase().includes(search.toLowerCase()))
+      return false;
     if (typeFilter !== "all" && t.type !== typeFilter) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     return true;
@@ -22,15 +53,25 @@ export default function TournamentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Discover Tournaments" description="Find and join chess tournaments" />
+      <PageHeader
+        title="Discover Tournaments"
+        description="Find and join chess tournaments"
+      />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search tournaments..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input
+            placeholder="Search tournaments..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="Swiss">Swiss</SelectItem>
@@ -41,7 +82,9 @@ export default function TournamentsPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="upcoming">Upcoming</SelectItem>
@@ -59,7 +102,18 @@ export default function TournamentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map((t, i) => (
-            <TournamentCard key={t.id} tournament={t} index={i} showJoin onJoin={setJoinTournament} />
+            <div
+              key={t.id}
+              onClick={() => handleCardClick(t)}
+              className="cursor-pointer"
+            >
+              <TournamentCard
+                tournament={t}
+                index={i}
+                showJoin
+                onJoin={setJoinTournament}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -68,6 +122,7 @@ export default function TournamentsPage() {
         tournament={joinTournament}
         open={!!joinTournament}
         onOpenChange={(open) => !open && setJoinTournament(null)}
+        onSuccess={handleJoinSuccess}
       />
     </div>
   );
