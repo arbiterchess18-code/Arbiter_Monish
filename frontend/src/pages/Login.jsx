@@ -22,39 +22,48 @@ const Login = () => {
 
     const togglePassword = () => setIsPasswordShown(!isPasswordShown);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const email = formData.get("email");
         const password = formData.get("password");
 
-        // Bypass Logic
-        if (email === "arbiterchess18@gmail.com" && password === "12345678") {
-            const userData = {
-                firstName: "Arbiter",
-                lastName: "Admin",
-                email: email,
-                role: "arbiter"
-            };
-            localStorage.setItem("userData", JSON.stringify(userData));
-            localStorage.setItem("authToken", "demo-token"); // Simulating login
+        try {
+            // OAuth2PasswordRequestForm expects username and password as URL-encoded form data
+            const body = new URLSearchParams();
+            body.append("username", email); // Using email as username for now as per form
+            body.append("password", password);
+
+            const response = await fetch("http://localhost:8000/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: body,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                alert(errorData.detail || "Login failed");
+                return;
+            }
+
+            const data = await response.json();
+
+            // Save actual backend data
+            localStorage.setItem("userData", JSON.stringify(data.userData));
+            localStorage.setItem("authToken", data.access_token);
             window.dispatchEvent(new Event("authChange"));
 
             // Role-based redirection
-            navigate("/arbiter-userhome");
-        } else {
-            // Defaulting to player for any other login (simulated)
-            const userData = {
-                firstName: "Guest",
-                lastName: "User",
-                email: email,
-                role: "player"
-            };
-            localStorage.setItem("userData", JSON.stringify(userData));
-            localStorage.setItem("authToken", "demo-token");
-            window.dispatchEvent(new Event("authChange"));
-
-            navigate("/player-userhome");
+            if (data.userData.role === "arbiter") {
+                navigate("/arbiter-userhome");
+            } else {
+                navigate("/player-userhome");
+            }
+        } catch (error) {
+            console.error("Login error:", error);
+            alert("Connection error. Is the backend running?");
         }
     };
 

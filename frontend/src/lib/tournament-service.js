@@ -3,80 +3,92 @@
  * Handles tournament operations, Swiss pairing, tie-breakers, and player management
  */
 
-// ==================== TOURNAMENT STORAGE ====================
+const API_URL = "http://localhost:8000";
 
 /**
- * Get all tournaments from localStorage
+ * Helper to get current auth headers
  */
-export const getTournaments = () => {
-  const stored = localStorage.getItem("tournaments");
-  return stored ? JSON.parse(stored) : [];
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("authToken");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+  };
+};
+
+/**
+ * Get all tournaments from Backend
+ */
+export const getTournaments = async () => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch tournaments");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching tournaments:", error);
+    return [];
+  }
 };
 
 /**
  * Get a single tournament by ID
  */
-export const getTournamentById = (id) => {
-  const tournaments = getTournaments();
-  return tournaments.find((t) => t.id === id);
-};
-
-/**
- * Save tournaments to localStorage
- */
-const saveTournaments = (tournaments) => {
-  localStorage.setItem("tournaments", JSON.stringify(tournaments));
+export const getTournamentById = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments/${id}`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error("Tournament not found");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching tournament by ID:", error);
+    return null;
+  }
 };
 
 /**
  * Create a new tournament
  */
-export const createTournament = (tournamentData) => {
-  const tournaments = getTournaments();
-
-  const newTournament = {
-    ...tournamentData,
-    id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    status: "upcoming",
-    players: [],
-    registeredPlayers: [],
-    rounds: parseInt(tournamentData.rounds || 5),
-    currentRound: 0,
-    pairings: [],
-    standings: [],
-    createdAt: new Date().toISOString(),
-    createdBy:
-      JSON.parse(localStorage.getItem("userData") || "{}").email || "unknown",
+export const createTournament = async (tournamentData) => {
+  // Mapping frontend fields to backend schema
+  const payload = {
+    tournament_name: tournamentData.name,
+    description: tournamentData.description,
+    start_date: tournamentData.startDate,
+    end_date: tournamentData.endDate,
+    max_players: parseInt(tournamentData.maxPlayers || 0),
+    is_rated: tournamentData.isRated === true || tournamentData.isRated === "true"
   };
 
-  tournaments.push(newTournament);
-  saveTournaments(tournaments);
+  const response = await fetch(`${API_URL}/tournaments`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload)
+  });
 
-  return newTournament;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to create tournament");
+  }
+
+  return await response.json();
 };
 
 /**
- * Update tournament
+ * Update tournament (Coming soon in backend)
  */
-export const updateTournament = (id, updates) => {
-  const tournaments = getTournaments();
-  const index = tournaments.findIndex((t) => t.id === id);
-
-  if (index === -1) throw new Error("Tournament not found");
-
-  tournaments[index] = { ...tournaments[index], ...updates };
-  saveTournaments(tournaments);
-
-  return tournaments[index];
+export const updateTournament = async (id, updates) => {
+  // Logic will be added when backend endpoint exists
+  return null;
 };
 
 /**
- * Delete tournament
+ * Delete tournament (Coming soon in backend)
  */
-export const deleteTournament = (id) => {
-  const tournaments = getTournaments();
-  const filtered = tournaments.filter((t) => t.id !== id);
-  saveTournaments(filtered);
+export const deleteTournament = async (id) => {
+  // Logic will be added when backend endpoint exists
 };
 
 // ==================== PLAYER REGISTRATION ====================

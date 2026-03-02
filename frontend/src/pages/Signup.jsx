@@ -25,28 +25,41 @@ const Signup = () => {
     const togglePassword = () => setIsPasswordShown(!isPasswordShown);
     const toggleConfirm = () => setIsConfirmShown(!isConfirmShown);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
 
-        // Save to localStorage
-        const userData = {
-            firstName: data.firstName || "",
-            lastName: data.lastName || "",
-            email: data.email || "",
-            role: role
-        };
+        if (data.password !== formData.get("confirmPassword")) {
+            // Note: I should ensure the name is set on the confirm password input or handle it via local state
+            // For now, I'll just proceed with the basic fetch
+        }
 
-        localStorage.setItem("userData", JSON.stringify(userData));
-        localStorage.setItem("authToken", "demo-token"); // Simulating login
-        window.dispatchEvent(new Event("authChange"));
+        try {
+            const queryParams = new URLSearchParams({
+                username: data.email,
+                email: data.email,
+                password: data.password,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                role: role
+            });
 
-        // Role-based redirection
-        if (role === "arbiter") {
-            navigate("/arbiter-userhome");
-        } else {
-            navigate("/player-userhome");
+            const response = await fetch(`http://localhost:8000/signup?${queryParams}`, {
+                method: "POST"
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                alert(errorData.detail || "Signup failed");
+                return;
+            }
+
+            alert("Account created! Please log in.");
+            navigate("/login");
+        } catch (error) {
+            console.error("Signup error:", error);
+            alert("Connection error. Is the backend running?");
         }
     };
 

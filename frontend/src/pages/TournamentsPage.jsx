@@ -27,10 +27,18 @@ export default function TournamentsPage() {
     loadTournaments();
   }, []);
 
-  const loadTournaments = () => {
+  const loadTournaments = async () => {
     // Combine mock tournaments with real tournaments from service
-    const realTournaments = getTournaments();
-    const combined = [...mockTournaments, ...realTournaments];
+    const realTournaments = await getTournaments();
+
+    // Standardize IDs for real tournaments if they exist
+    const standardizedReal = realTournaments.map(t => ({
+      ...t,
+      id: t.tournament_id, // Map backend field to frontend 'id'
+      name: t.tournament_name // Map backend field to frontend 'name'
+    }));
+
+    const combined = [...mockTournaments, ...standardizedReal];
     setAllTournaments(combined);
   };
 

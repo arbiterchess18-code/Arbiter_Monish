@@ -56,19 +56,29 @@ export default function TournamentDetails() {
     loadTournament();
   }, [id]);
 
-  const loadTournament = () => {
+  const loadTournament = async () => {
     try {
-      const data = getTournamentById(id);
+      const data = await getTournamentById(id);
       if (!data) {
         toast.error("Tournament not found");
         navigate("/tournaments");
         return;
       }
-      setTournament(data);
 
-      if (data.status === "active" || data.status === "completed") {
-        const standingsData = getStandings(id);
-        setStandings(standingsData);
+      // Map backend fields to frontend expected names
+      const mappedData = {
+        ...data,
+        id: data.tournament_id,
+        name: data.tournament_name,
+        // Ensure registeredPlayers is always an array
+        registeredPlayers: data.registeredPlayers || []
+      };
+
+      setTournament(mappedData);
+
+      if (mappedData.status === "active" || mappedData.status === "completed") {
+        const standingsData = await getStandings(id);
+        setStandings(standingsData || []);
       }
 
       setLoading(false);
@@ -254,8 +264,8 @@ export default function TournamentDetails() {
           <TabsTrigger value="participants">Participants</TabsTrigger>
           {(tournament.status === "active" ||
             tournament.status === "completed") && (
-            <TabsTrigger value="standings">Standings</TabsTrigger>
-          )}
+              <TabsTrigger value="standings">Standings</TabsTrigger>
+            )}
           {tournament.description && (
             <TabsTrigger value="details">Details</TabsTrigger>
           )}

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,8 @@ const mockPairings = [
 ];
 
 export default function ResultsEntry() {
+  const navigate = useNavigate();
+  const [selectedTournament, setSelectedTournament] = useState("1");
   const handleSubmit = () => toast.success("Results submitted successfully!");
 
   return (
@@ -22,7 +26,7 @@ export default function ResultsEntry() {
       <PageHeader title="Results Entry" description="Enter and validate match results" />
 
       <div className="flex gap-3">
-        <Select defaultValue="1">
+        <Select value={selectedTournament} onValueChange={setSelectedTournament}>
           <SelectTrigger className="w-64"><SelectValue placeholder="Select tournament" /></SelectTrigger>
           <SelectContent>
             {mockTournaments.filter(t => t.status === "active").map(t => (
@@ -73,6 +77,9 @@ export default function ResultsEntry() {
       </motion.div>
 
       <div className="flex justify-end gap-3">
+        <Button variant="outline" onClick={() => navigate(`/arbiter/tournament/${selectedTournament}/pairings`)}>
+          Manage Pairings
+        </Button>
         <Button variant="outline">Validate</Button>
         <Button onClick={handleSubmit}>Submit Results</Button>
       </div>
