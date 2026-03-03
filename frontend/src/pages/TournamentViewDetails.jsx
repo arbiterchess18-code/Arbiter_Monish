@@ -38,6 +38,7 @@ import {
   getTournamentPairings,
   getTournamentRegistrationsApi,
   getTournamentViewDetails,
+  seedTournamentPlayers,
   startTournamentPairing,
   submitTournamentRegistration,
   updateTournament,
@@ -62,6 +63,7 @@ export default function TournamentViewDetails() {
   const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isStartingPairing, setIsStartingPairing] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -206,6 +208,21 @@ export default function TournamentViewDetails() {
       toast.error(error.message || "Failed to start pairing");
     } finally {
       setIsStartingPairing(false);
+    }
+  };
+
+  const handleSeedPlayers = async () => {
+    if (!id) return;
+
+    setIsSeeding(true);
+    try {
+      const result = await seedTournamentPlayers(id);
+      toast.success(result.message || "Players seeded successfully");
+      await loadData();
+    } catch (error) {
+      toast.error(error.message || "Failed to seed players");
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -456,8 +473,8 @@ export default function TournamentViewDetails() {
 
         {tabs.includes("management") ? (
           <TabsContent value="management" className="space-y-4">
-            <Card>
-              <CardHeader>
+            <Card className="border-border">
+              <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="text-base">Management</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -541,8 +558,18 @@ export default function TournamentViewDetails() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-base">Registrations</CardTitle>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSeedPlayers}
+                    disabled={isSeeding}
+                  >
+                    {isSeeding ? "Seeding..." : "Seed Test Players"}
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 {filteredRegistrations.length === 0 ? (

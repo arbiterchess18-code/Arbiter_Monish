@@ -1,0 +1,192 @@
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Date, TIMESTAMP, Numeric
+from sqlalchemy.orm import relationship
+from .database import Base
+import datetime
+from sqlalchemy.sql import func
+import json
+
+class Role(Base):
+    __tablename__ = "roles"
+    role_id = Column(Integer, primary_key=True, index=True)
+    role_name = Column(String(50), unique=True, nullable=False)
+    description = Column(Text)
+
+    user_roles = relationship("UserRole", back_populates="role")
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+    user_role_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"))
+    role_id = Column(Integer, ForeignKey("roles.role_id", ondelete="CASCADE"))
+    assigned_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("User", back_populates="user_roles")
+    role = relationship("Role", back_populates="user_roles")
+
+
+class User(Base):
+    __tablename__ = "users"
+    user_id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(Text, nullable=False)
+    first_name = Column(String(100))
+    last_name = Column(String(100))
+    date_of_birth = Column(Date)
+    gender = Column(String(20))
+    fide_id = Column(String(20), unique=True)
+    fide_rating = Column(Integer, default=0)
+    national_rating = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user_roles = relationship(
+        "UserRole", back_populates="user", cascade="all, delete-orphan")
+    created_tournaments = relationship("Tournament", back_populates="creator")
+    registrations = relationship(
+        "TournamentRegistration", back_populates="user")
+    white_matches = relationship(
+        "Match", foreign_keys="[Match.white_player_id]", back_populates="white_player")
+    black_matches = relationship(
+        "Match", foreign_keys="[Match.black_player_id]", back_populates="black_player")
+
+
+class Tournament(Base):
+    __tablename__ = "tournaments"
+    tournament_id = Column(Integer, primary_key=True, index=True)
+    created_by = Column(Integer, ForeignKey(
+        "users.user_id", ondelete="SET NULL"))
+    tournament_name = Column(String(255), nullable=False, index=True)
+    description = Column(Text)
+    start_date = Column(Date)
+    end_date = Column(Date)
+    start_time = Column(String(20))
+    venue_name = Column(String(255))
+    city = Column(String(100))
+    state = Column(String(100))
+    country = Column(String(100))
+    google_maps_link = Column(Text)
+
+    contact_person = Column(String(255))
+    contact_email = Column(String(255))
+    contact_phone = Column(String(20))
+
+    organizer_name = Column(String(255))
+    registration_type = Column(String(50))  # open, restricted, invite
+    entry_fee = Column(Numeric(10, 2), default=0.0)
+
+    # Swiss, Round Robin, Knockout
+    pairing_system = Column(String(50), default="Swiss")
+    event_type = Column(String(50))  # Standard, Rapid, Blitz
+    time_control = Column(String(50))  # e.g., "90+30"
+    increment = Column(Integer, default=0)
+    rounds = Column(Integer, default=5)
+    current_round = Column(Integer, default=0)
+    max_players = Column(Integer)
+    min_rating = Column(Integer, default=0)
+
+    is_rated = Column(Boolean, default=False)
+    fide_id = Column(String(50))
+    aicf_id = Column(String(50))
+    is_private = Column(Boolean, default=False)
+
+    # upcoming, active, completed
+    status = Column(String(30), default="upcoming")
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User", back_populates="created_tournaments")
+    rounds_list = relationship(
+        "Round", back_populates="tournament", cascade="all, delete-orphan")
+    registrations = relationship(
+        "TournamentRegistration", back_populates="tournament", cascade="all, delete-orphan")
+    matches = relationship(
+        "Match", back_populates="tournament", cascade="all, delete-orphan")
+    registration_form_fields = relationship(
+        "RegistrationFormField", back_populates="tournament", cascade="all, delete-orphan")
+
+
+class Round(Base):
+    __tablename__ = "rounds"
+    round_id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"))
+    round_number = Column(Integer, nullable=False)
+    start_time = Column(TIMESTAMP)
+
+    tournament = relationship("Tournament", back_populates="rounds_list")
+    matches = relationship("Match", back_populates="round",
+                           cascade="all, delete-orphan")
+
+
+class Match(Base):
+    __tablename__ = "matches"
+    match_id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"))
+    round_id = Column(Integer, ForeignKey(
+        "rounds.round_id", ondelete="CASCADE"))
+    white_player_id = Column(Integer, ForeignKey("users.user_id"))
+    black_player_id = Column(Integer, ForeignKey("users.user_id"))
+    board_number = Column(Integer)
+    result = Column(String(20))  # 1-0, 0-1, 1/2-1/2, Bye
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    tournament = relationship("Tournament", back_populates="matches")
+    round = relationship("Round", back_populates="matches")
+    white_player = relationship(
+        "User", foreign_keys=[white_player_id], back_populates="white_matches")
+    black_player = relationship(
+        "User", foreign_keys=[black_player_id], back_populates="black_matches")
+
+
+class TournamentRegistration(Base):
+    __tablename__ = "tournament_registrations"
+    registration_id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"))
+    registration_date = Column(TIMESTAMP, server_default=func.now())
+    status = Column(String(30), default="pending")
+
+    # Fields for pairing algorithm
+    current_points = Column(Numeric(4, 1), default=0.0)
+    seed = Column(Integer)
+    color_history = Column(String(255), default="")  # e.g. "WBW"
+    bye_received = Column(Boolean, default=False)
+
+    tournament = relationship("Tournament", back_populates="registrations")
+    user = relationship("User", back_populates="registrations")
+
+
+class RegistrationFormField(Base):
+    __tablename__ = "registration_form_fields"
+    field_id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"))
+    field_name = Column(String(255), nullable=False)
+    # Text, Email, Number, Date, Dropdown, Text Area
+    field_type = Column(String(50), nullable=False)
+    is_required = Column(Boolean, default=False)
+    field_order = Column(Integer, default=0)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    tournament = relationship(
+        "Tournament", back_populates="registration_form_fields")
+
+
+class RatingHistory(Base):
+    __tablename__ = "rating_history"
+    rating_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"))
+    tournament_id = Column(Integer, ForeignKey("tournaments.tournament_id"))
+    old_rating = Column(Integer)
+    new_rating = Column(Integer)
+    rating_change = Column(Integer)
+    calculated_at = Column(TIMESTAMP, server_default=func.now())

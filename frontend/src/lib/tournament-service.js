@@ -5,15 +5,32 @@
 
 const API_URL = "http://localhost:8000";
 
-/**
- * Helper to get current auth headers
- */
 const getAuthHeaders = () => {
   const token = localStorage.getItem("authToken");
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+};
+
+/**
+ * Handle API responses and catch 401s
+ */
+const handleResponse = async (response) => {
+  if (response.status === 401) {
+    // Session expired or invalid
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("userData");
+    window.dispatchEvent(new Event("authChange"));
+
+    // Use a slight delay to allow the current flow to finish
+    setTimeout(() => {
+      window.location.href = "/login?expired=true";
+    }, 100);
+
+    throw new Error("Session expired. Please log in again.");
+  }
+  return response;
 };
 
 /**
@@ -24,6 +41,7 @@ export const getTournaments = async () => {
     const response = await fetch(`${API_URL}/tournaments`, {
       headers: getAuthHeaders(),
     });
+    await handleResponse(response);
     if (!response.ok) throw new Error("Failed to fetch tournaments");
     return await response.json();
   } catch (error) {
@@ -37,13 +55,28 @@ export const getTournaments = async () => {
  */
 export const getArbiterTournaments = async () => {
   try {
-    const response = await fetch(`${API_URL}/arbiter/tournaments`, {
+    const response = await fetch(`${API_URL}/tournaments/arbiter`, {
       headers: getAuthHeaders(),
     });
+    await handleResponse(response);
     if (!response.ok) throw new Error("Failed to fetch arbiter tournaments");
     return await response.json();
   } catch (error) {
     console.error("Error fetching arbiter tournaments:", error);
+    return [];
+  }
+};
+
+/**
+ * Get all public (published) tournaments
+ */
+export const getPublicTournaments = async () => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments/public`);
+    await handleResponse(response);
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching public tournaments:", error);
     return [];
   }
 };
@@ -56,6 +89,7 @@ export const getTournamentById = async (id) => {
     const response = await fetch(`${API_URL}/tournaments/${id}`, {
       headers: getAuthHeaders(),
     });
+    await handleResponse(response);
     if (!response.ok) throw new Error("Tournament not found");
     return await response.json();
   } catch (error) {
@@ -65,8 +99,40 @@ export const getTournamentById = async (id) => {
 };
 
 /**
- * Create a new tournament
+ * Get tournament registrations
  */
+export const getTournamentRegistrations = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments/${id}/registrations`, {
+      headers: getAuthHeaders(),
+    });
+    await handleResponse(response);
+    if (!response.ok) throw new Error("Failed to fetch registrations");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching registrations:", error);
+    return [];
+  }
+};
+
+/**
+ * Update registration status (Approve/Reject)
+ */
+export const updateRegistrationStatus = async (tournamentId, registrationId, status) => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations/${registrationId}/status`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    await handleResponse(response);
+    if (!response.ok) throw new Error("Failed to update registration status");
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating registration status:", error);
+    throw error;
+  }
+};
 export const createTournament = async (tournamentData) => {
   // Mapping frontend fields to backend schema
   const payload = {
@@ -106,6 +172,8 @@ export const createTournament = async (tournamentData) => {
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
+
+  await handleResponse(response);
 
   if (!response.ok) {
     const errorData = await response.json();
@@ -203,55 +271,48 @@ export const deleteTournament = async (id) => {
 // ==================== PLAYER REGISTRATION ====================
 
 /**
- * Register a player for a tournament
+ * Register a player for a tournament (Real API)
  */
-export const registerPlayer = (tournamentId, playerData) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-  if (tournament.status !== "upcoming") throw new Error("Registration closed");
-  if (
-    tournament.registeredPlayers.length >= parseInt(tournament.maxPlayers || 64)
-  ) {
-    throw new Error("Tournament is full");
-  }
-
-  // Check if player already registered
-  const alreadyRegistered = tournament.registeredPlayers.some(
-    (p) => p.email === playerData.email || p.fideId === playerData.fideId,
-  );
-
-  if (alreadyRegistered) throw new Error("Player already registered");
-
-  // Validate minimum rating if required
-  if (
-    tournament.minRating &&
-    playerData.rating < parseInt(tournament.minRating)
-  ) {
-    throw new Error(`Minimum rating required: ${tournament.minRating}`);
-  }
-
-  const player = {
-    ...playerData,
-    id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    registeredAt: new Date().toISOString(),
-    points: 0,
-    buchholz: 0,
-    sonnebornBerger: 0,
-    wins: 0,
-    losses: 0,
-    draws: 0,
-    opponents: [],
-    colors: [], // Track which color player had each round
-    results: [], // Track results of each round
-  };
-
-  tournament.registeredPlayers.push(player);
-  updateTournament(tournamentId, {
-    registeredPlayers: tournament.registeredPlayers,
+export const registerPlayer = async (tournamentId, formData) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ form_data: formData }),
   });
 
-  return player;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to register for tournament");
+  }
+
+  return await response.json();
+};
+
+/**
+ * Register a player manually onsite (Arbiter only)
+ */
+export const manualRegisterPlayer = async (tournamentId, manualData) => {
+  const payload = {
+    is_manual: true,
+    player_name: manualData.fullName,
+    player_email: manualData.email,
+    player_phone: manualData.phone || undefined,
+    player_rating: parseInt(manualData.rating) || undefined,
+    player_fide_id: manualData.fideId || undefined,
+  };
+
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to manually register player");
+  }
+
+  return await response.json();
 };
 
 /**
@@ -454,77 +515,7 @@ const pairSubsequentRound = (players, roundNumber) => {
 /**
  * Submit results for a round
  */
-export const submitRoundResults = (tournamentId, roundNumber, results) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-
-  // Update player records based on results
-  results.forEach((result) => {
-    const whitePlayer = tournament.registeredPlayers.find(
-      (p) => p.id === result.whiteId,
-    );
-    const blackPlayer = result.blackId
-      ? tournament.registeredPlayers.find((p) => p.id === result.blackId)
-      : null;
-
-    if (!whitePlayer) return;
-
-    // Initialize arrays if needed
-    if (!whitePlayer.results) whitePlayer.results = [];
-    if (!whitePlayer.opponents) whitePlayer.opponents = [];
-    if (!whitePlayer.colors) whitePlayer.colors = [];
-
-    whitePlayer.colors.push("white");
-    whitePlayer.results.push(result.result);
-
-    if (blackPlayer) {
-      if (!blackPlayer.results) blackPlayer.results = [];
-      if (!blackPlayer.opponents) blackPlayer.opponents = [];
-      if (!blackPlayer.colors) blackPlayer.colors = [];
-
-      blackPlayer.colors.push("black");
-      whitePlayer.opponents.push(blackPlayer.id);
-      blackPlayer.opponents.push(whitePlayer.id);
-    }
-
-    // Update points and W/L/D
-    if (result.result === "1-0") {
-      whitePlayer.points = (whitePlayer.points || 0) + 1;
-      whitePlayer.wins = (whitePlayer.wins || 0) + 1;
-      if (blackPlayer) {
-        blackPlayer.results.push("0-1");
-        blackPlayer.losses = (blackPlayer.losses || 0) + 1;
-      }
-    } else if (result.result === "0-1") {
-      whitePlayer.losses = (whitePlayer.losses || 0) + 1;
-      if (blackPlayer) {
-        blackPlayer.results.push("1-0");
-        blackPlayer.points = (blackPlayer.points || 0) + 1;
-        blackPlayer.wins = (blackPlayer.wins || 0) + 1;
-      }
-    } else if (result.result === "½-½") {
-      whitePlayer.points = (whitePlayer.points || 0) + 0.5;
-      whitePlayer.draws = (whitePlayer.draws || 0) + 1;
-      if (blackPlayer) {
-        blackPlayer.results.push("½-½");
-        blackPlayer.points = (blackPlayer.points || 0) + 0.5;
-        blackPlayer.draws = (blackPlayer.draws || 0) + 1;
-      }
-    }
-  });
-
-  // Calculate tie-breakers
-  calculateTieBreakers(tournament);
-
-  // Update tournament
-  updateTournament(tournamentId, {
-    currentRound: roundNumber,
-    registeredPlayers: tournament.registeredPlayers,
-  });
-
-  return tournament;
-};
+// Removed old local mock
 
 // ==================== TIE-BREAKER CALCULATIONS ====================
 
@@ -984,6 +975,62 @@ export const startTournamentPairing = async (tournamentId) => {
     throw new Error(errorData.detail || "Failed to start pairings");
   }
 
+  return await response.json();
+};
+
+export const seedTournamentPlayers = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/seed-players`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to seed players");
+  }
+
+  return await response.json();
+};
+
+export const submitRoundResults = async (tournamentId, results) => {
+  const promises = results.map((item) =>
+    fetch(
+      `${API_URL}/tournaments/${tournamentId}/matches/${item.match_id}/result`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ result: item.result }),
+      },
+    ).then(async (res) => {
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `Failed to update board ${item.match_id}`,
+        );
+      }
+      return res.json();
+    }),
+  );
+
+  return Promise.all(promises);
+};
+
+export const updateMatchResult = async (tournamentId, matchId, result) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/matches/${matchId}/result`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ result }),
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to update match result");
+  }
   return await response.json();
 };
 

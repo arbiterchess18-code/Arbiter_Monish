@@ -24,8 +24,8 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import {
   getTournamentById,
-  generateSwissPairings,
-  generateRoundRobinPairings,
+  getTournamentPairings,
+  startTournamentPairing,
   submitRoundResults,
   updateTournament,
 } from "@/lib/tournament-service";
@@ -41,55 +41,47 @@ export default function TournamentPairings() {
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    loadTournament();
+    loadTournamentData();
   }, [id]);
 
-  const loadTournament = () => {
+  const loadTournamentData = async () => {
+    setLoading(true);
     try {
-      const data = getTournamentById(id);
-      if (!data) {
+      const [tData, pData] = await Promise.all([
+        getTournamentById(id),
+        getTournamentPairings(id)
+      ]);
+
+      if (!tData) {
         toast.error("Tournament not found");
         navigate("/tournaments");
         return;
       }
-      setTournament(data);
-      setCurrentRound(data.currentRound + 1);
-      setLoading(false);
+
+      setTournament(tData);
+      setCurrentRound(tData.current_round || 1);
+      setPairings(pData?.pairings || []);
+
+      // Initialize results state
+      const initialResults = {};
+      (pData?.pairings || []).forEach((pairing, index) => {
+        initialResults[index] = pairing.result || "";
+      });
+      setResults(initialResults);
+
     } catch (error) {
       toast.error(error.message);
+    } finally {
       setLoading(false);
     }
   };
 
   const handleGeneratePairings = async () => {
     setGenerating(true);
-
     try {
-      let newPairings;
-
-      if (tournament.type === "Swiss System" || tournament.type === "Swiss") {
-        newPairings = generateSwissPairings(id, currentRound);
-      } else if (tournament.type === "Round Robin") {
-        const allRounds = generateRoundRobinPairings(
-          tournament.registeredPlayers,
-        );
-        newPairings = allRounds[currentRound - 1] || [];
-      } else {
-        throw new Error(
-          "Pairing system not yet implemented for this tournament type",
-        );
-      }
-
-      setPairings(newPairings);
-
-      // Initialize results state
-      const initialResults = {};
-      newPairings.forEach((pairing, index) => {
-        initialResults[index] = pairing.result || "";
-      });
-      setResults(initialResults);
-
-      toast.success(`Round ${currentRound} pairings generated!`);
+      await startTournamentPairing(id);
+      toast.success(`Round pairings generated!`);
+      await loadTournamentData();
     } catch (error) {
       toast.error(error.message || "Failed to generate pairings");
     } finally {

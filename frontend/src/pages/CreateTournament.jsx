@@ -102,6 +102,59 @@ export default function CreateTournament() {
     kscaId: "",
   });
 
+  const handleAutofill = () => {
+    const today = new Date().toISOString().split("T")[0];
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const demoData = {
+      name: "Chess Arena Masters 2024",
+      startDate: today,
+      startTime: "10:00",
+      endDate: nextWeek,
+      description:
+        "A premier chess event featuring the best players in the region. Join us for 9 rounds of intense competition and grand mastery.",
+      contactPerson: "Harsha HS",
+      contactEmail: "harsha@example.com",
+      contactPhone: "9876543210",
+      city: "Bangalore",
+      state: "Karnataka",
+      country: "India",
+      venueName: "Grand Ballroom, Palace Hotel",
+      googleMapsLink: "https://maps.google.com/example",
+      registrationType: "Free",
+      entryFee: "0",
+      organizerName: "Chess Orbiter Foundation",
+      isOrganizerVerified: true,
+      eventType: "Standard",
+      pairingSystem: "Swiss",
+      type: "Swiss System",
+      timeControl: "90",
+      increment: "30",
+      rounds: "9",
+      maxPlayers: "100",
+      minRating: "1200",
+      mode: "Offline",
+      isRated: true,
+      fideId: "FIDE7890",
+      aicfId: "AICF4567",
+      kscaId: "KSCA1234",
+      isPrivate: false,
+      hasPrizes: true,
+      prizeCategories: [
+        { category: "Open First", amount: "50000" },
+        { category: "Open Second", amount: "25000" },
+        { category: "Best Junior", amount: "5000" },
+      ],
+      tieBreakers: ["Buchholz", "Sonneborn-Berger"],
+    };
+
+    setTournamentData(demoData);
+    setErrors({});
+    toast.success("Form pre-filled with demo data! All steps populated.");
+  };
+
   useEffect(() => {
     if (tournamentData.type === "Swiss System") {
       const suggestedRounds = Math.ceil(
@@ -577,7 +630,7 @@ export default function CreateTournament() {
 
       const savedId = savedTournament.tournament_id || savedTournament.id;
       setTimeout(() => {
-        navigate(`/arbiter/tournament/${savedId}/summary`);
+        navigate("/orbiter/manage");
       }, 500);
     } catch (error) {
       toast.error(error.message || "Failed to create tournament");
@@ -641,6 +694,17 @@ export default function CreateTournament() {
       <PageHeader
         title={editTournamentId ? "Edit Tournament" : "Create Tournament"}
         description="Complete the steps below to create your tournament"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAutofill}
+            className="flex items-center gap-2 border-primary/40 hover:bg-primary/10"
+          >
+            <Plus className="w-4 h-4" />
+            Autofill Demo Data
+          </Button>
+        }
       />
 
       <StepIndicator />

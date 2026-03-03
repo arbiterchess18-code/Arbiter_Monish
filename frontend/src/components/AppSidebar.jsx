@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Trophy, PlusCircle, Settings, Users, BarChart3,
-  ClipboardList, User, Swords, Award, Search, Crown, Gamepad2
+  ClipboardList, User, Swords, Award, Search, Crown, Gamepad2, LogOut
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -41,6 +41,13 @@ const userLinks = [
 
 export function AppSidebar() {
   const { role, setRole } = useRole();
+
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("userData");
+    window.dispatchEvent(new Event("authChange"));
+    window.location.href = "/login";
+  };
 
   return (
     <Sidebar className="border-r border-sidebar-border">
@@ -135,6 +142,20 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+
+      <div className="mt-auto p-4 border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleLogout}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-destructive hover:bg-destructive/10 transition-colors w-full text-left"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              <span>Log Out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </div>
     </Sidebar>
   );
 }

@@ -36,17 +36,20 @@ const Signup = () => {
         }
 
         try {
-            const queryParams = new URLSearchParams({
+            const payload = {
                 username: data.email,
                 email: data.email,
                 password: data.password,
-                firstName: data.firstName,
-                lastName: data.lastName,
-                role: role
-            });
+                first_name: data.firstName,
+                last_name: data.lastName
+            };
 
-            const response = await fetch(`http://localhost:8000/signup?${queryParams}`, {
-                method: "POST"
+            const response = await fetch(`http://localhost:8000/signup?role=${role}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
             });
 
             if (!response.ok) {

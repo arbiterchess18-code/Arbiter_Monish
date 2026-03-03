@@ -11,8 +11,7 @@ import {
 import { Search } from "lucide-react";
 import { TournamentCard } from "@/components/TournamentCard";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
-import { mockTournaments } from "@/lib/mock-data";
-import { getTournaments } from "@/lib/tournament-service";
+import { getPublicTournaments } from "@/lib/tournament-service";
 import { useNavigate } from "react-router-dom";
 
 export default function TournamentsPage() {
@@ -22,24 +21,30 @@ export default function TournamentsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [joinTournament, setJoinTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTournaments();
   }, []);
 
   const loadTournaments = async () => {
-    // Combine mock tournaments with real tournaments from service
-    const realTournaments = await getTournaments();
+    setLoading(true);
+    try {
+      const realTournaments = await getPublicTournaments();
 
-    // Standardize IDs for real tournaments if they exist
-    const standardizedReal = realTournaments.map(t => ({
-      ...t,
-      id: t.tournament_id, // Map backend field to frontend 'id'
-      name: t.tournament_name // Map backend field to frontend 'name'
-    }));
+      // Standardize IDs for real tournaments
+      const standardizedReal = realTournaments.map(t => ({
+        ...t,
+        id: t.tournament_id,
+        name: t.tournament_name
+      }));
 
-    const combined = [...mockTournaments, ...standardizedReal];
-    setAllTournaments(combined);
+      setAllTournaments(standardizedReal);
+    } catch (error) {
+      console.error("Error loading tournaments:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleJoinSuccess = () => {
@@ -102,7 +107,11 @@ export default function TournamentsPage() {
         </Select>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-muted-foreground animate-pulse">Searching for tournaments...</div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <p className="font-display text-lg">No tournaments found</p>
           <p className="text-sm mt-1">Try adjusting your filters</p>

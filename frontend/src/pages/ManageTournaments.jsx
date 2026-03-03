@@ -47,7 +47,8 @@ export default function ManageTournaments() {
         city: t.city,
         state: t.state,
         country: t.country,
-        players: t.max_players || 0,
+        players: t.registered_count || 0,
+        maxPlayers: t.max_players || 0,
         rounds: t.rounds || 0,
         status: t.status || "upcoming",
         isPublished: t.isPublished || t.status === "published",
@@ -112,12 +113,12 @@ export default function ManageTournaments() {
   };
 
   const togglePublish = async (tournament) => {
-    const isCurrentlyPublished = tournament.isPublished;
-    const newStatus = isCurrentlyPublished ? "upcoming" : "published"; // or active
+    const isCurrentlyPublished = tournament.status === "published";
+    const newStatus = isCurrentlyPublished ? "upcoming" : "published";
     try {
       await updateTournament(tournament.id, {
-        isPublished: !isCurrentlyPublished,
         status: newStatus,
+        is_private: isCurrentlyPublished // If unpublishing, maybe make it private? Or just rely on status.
       });
       toast.success(
         isCurrentlyPublished
@@ -181,7 +182,7 @@ export default function ManageTournaments() {
                   variant="outline"
                   size="sm"
                   className="w-full text-xs font-medium"
-                  onClick={() => navigate(`/tournament/${t.id}/view-details`)}
+                  onClick={() => navigate(`/tournament/${t.id}`)}
                   title="View tournament details"
                 >
                   <Eye className="h-3.5 w-3.5 mr-1" /> View Details
@@ -198,17 +199,17 @@ export default function ManageTournaments() {
                 </Button>
 
                 <Button
-                  variant={t.isPublished ? "default" : "outline"}
+                  variant={t.status === "published" ? "default" : "outline"}
                   size="sm"
-                  className={`w-full text-xs font-medium ${t.isPublished ? "bg-green-600 hover:bg-green-700" : ""}`}
+                  className={`w-full text-xs font-medium ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
                   onClick={() => togglePublish(t)}
                   title={
-                    t.isPublished
+                    t.status === "published"
                       ? "Unpublish tournament"
                       : "Publish tournament"
                   }
                 >
-                  {t.isPublished ? (
+                  {t.status === "published" ? (
                     <>
                       <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
                     </>
