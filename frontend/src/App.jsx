@@ -29,6 +29,7 @@ import TournamentDetails from "./pages/TournamentDetails";
 import TournamentPairings from "./pages/TournamentPairings";
 import TournamentSummary from "./pages/TournamentSummary";
 import RegistrationFormBuilder from "./pages/RegistrationFormBuilder";
+import TournamentViewDetails from "./pages/TournamentViewDetails";
 import NotFound from "./pages/NotFound";
 import { useRole } from "@/lib/role-context";
 import { Navigate } from "react-router-dom";
@@ -109,6 +110,10 @@ const App = () => (
                       <Route
                         path="/tournament/:id"
                         element={<TournamentDetails />}
+                      />
+                      <Route
+                        path="/tournament/:id/view-details"
+                        element={<TournamentViewDetails />}
                       />
                       <Route path="/dashboard" element={<UserDashboard />} />
                       <Route path="/history" element={<MatchHistoryPage />} />

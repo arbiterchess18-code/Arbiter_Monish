@@ -362,10 +362,12 @@ export default function CreateTournament() {
       const requiredFields = {
         name: "Tournament name is required (minimum 3 characters)",
         startDate: "Start date is required",
+        startTime: "Start time is required",
         contactPerson: "Contact person is required",
         contactEmail: "Contact email is required",
         contactPhone: "Contact phone is required",
         city: "City is required",
+        country: "Country is required",
         venueName: "Venue name is required",
         organizerName: "Organizer name is required",
       };
@@ -399,8 +401,10 @@ export default function CreateTournament() {
       // Check other required fields (just non-empty)
       [
         "startDate",
+        "startTime",
         "contactPerson",
         "city",
+        "country",
         "venueName",
         "organizerName",
       ].forEach((field) => {
@@ -484,6 +488,16 @@ export default function CreateTournament() {
 
       // Validate rating IDs if rated
       if (tournamentData.isRated) {
+        if (
+          !tournamentData.fideId &&
+          !tournamentData.aicfId &&
+          !tournamentData.kscaId
+        ) {
+          newErrors.fideId =
+            "At least one rating ID (FIDE, AICF, or KSCA) is required";
+          isValid = false;
+        }
+
         ["fideId", "aicfId", "kscaId"].forEach((field) => {
           const value = tournamentData[field];
           if (value && !/^[a-zA-Z0-9]+$/.test(value)) {
@@ -1041,6 +1055,7 @@ export default function CreateTournament() {
                       <SelectItem value="Rapid">Rapid</SelectItem>
                       <SelectItem value="Classical">Classical</SelectItem>
                       <SelectItem value="Bullet">Bullet</SelectItem>
+                      <SelectItem value="Business">Business</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.eventType && (

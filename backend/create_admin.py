@@ -9,7 +9,6 @@ def get_password_hash(password):
 def create_super_admin():
     db = SessionLocal()
 
-    # 1. Seed Roles
     roles = ["SUPER_ADMIN", "ADMIN", "ARBITER", "PLAYER"]
     for role_name in roles:
         existing_role = db.query(Role).filter(Role.role_name == role_name).first()

@@ -12,7 +12,7 @@ const getAuthHeaders = () => {
   const token = localStorage.getItem("authToken");
   return {
     "Content-Type": "application/json",
-    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 };
 
@@ -22,7 +22,7 @@ const getAuthHeaders = () => {
 export const getTournaments = async () => {
   try {
     const response = await fetch(`${API_URL}/tournaments`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error("Failed to fetch tournaments");
     return await response.json();
@@ -33,12 +33,28 @@ export const getTournaments = async () => {
 };
 
 /**
+ * Get tournaments created by the current arbiter
+ */
+export const getArbiterTournaments = async () => {
+  try {
+    const response = await fetch(`${API_URL}/arbiter/tournaments`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch arbiter tournaments");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching arbiter tournaments:", error);
+    return [];
+  }
+};
+
+/**
  * Get a single tournament by ID
  */
 export const getTournamentById = async (id) => {
   try {
     const response = await fetch(`${API_URL}/tournaments/${id}`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error("Tournament not found");
     return await response.json();
@@ -58,14 +74,37 @@ export const createTournament = async (tournamentData) => {
     description: tournamentData.description,
     start_date: tournamentData.startDate,
     end_date: tournamentData.endDate,
-    max_players: parseInt(tournamentData.maxPlayers || 0),
-    is_rated: tournamentData.isRated === true || tournamentData.isRated === "true"
+    start_time: tournamentData.startTime || "09:00",
+    venue_name: tournamentData.venueName,
+    city: tournamentData.city,
+    state: tournamentData.state,
+    country: tournamentData.country || "India",
+    google_maps_link: tournamentData.googleMapsLink,
+    contact_person: tournamentData.contactPerson,
+    contact_email: tournamentData.contactEmail,
+    contact_phone: tournamentData.contactPhone,
+    organizer_name: tournamentData.organizerName,
+    registration_type: tournamentData.registrationType || "Free",
+    entry_fee: parseFloat(tournamentData.entryFee || 0),
+    pairing_system: tournamentData.pairingSystem || "Swiss",
+    event_type: tournamentData.eventType || "Rapid",
+    time_control: tournamentData.timeControl || "15",
+    increment: parseInt(tournamentData.increment || 10),
+    rounds: parseInt(tournamentData.rounds || 5),
+    max_players: parseInt(tournamentData.maxPlayers || 64),
+    min_rating: parseInt(tournamentData.minRating || 0),
+    is_rated:
+      tournamentData.isRated === true || tournamentData.isRated === "true",
+    fide_id: tournamentData.fideId || null,
+    aicf_id: tournamentData.aicfId || null,
+    is_private:
+      tournamentData.isPrivate === true || tournamentData.isPrivate === "true",
   };
 
   const response = await fetch(`${API_URL}/tournaments`, {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -77,18 +116,88 @@ export const createTournament = async (tournamentData) => {
 };
 
 /**
- * Update tournament (Coming soon in backend)
+ * Update tournament
  */
 export const updateTournament = async (id, updates) => {
-  // Logic will be added when backend endpoint exists
-  return null;
+  const pickDefined = (...values) => {
+    for (const value of values) {
+      if (value !== undefined) return value;
+    }
+    return undefined;
+  };
+
+  // Map frontend field names to backend field names
+  const payload = {
+    tournament_name: updates.name || updates.tournament_name,
+    description: updates.description,
+    start_date: updates.startDate || updates.start_date,
+    end_date: updates.endDate || updates.end_date,
+    start_time: updates.startTime || updates.start_time,
+    venue_name: updates.venueName || updates.venue_name,
+    city: updates.city,
+    state: updates.state,
+    country: updates.country,
+    google_maps_link: updates.googleMapsLink || updates.google_maps_link,
+    contact_person: updates.contactPerson || updates.contact_person,
+    contact_email: updates.contactEmail || updates.contact_email,
+    contact_phone: updates.contactPhone || updates.contact_phone,
+    organizer_name: updates.organizerName || updates.organizer_name,
+    registration_type: updates.registrationType || updates.registration_type,
+    entry_fee: updates.entryFee || updates.entry_fee,
+    pairing_system: updates.pairingSystem || updates.pairing_system,
+    event_type: updates.eventType || updates.event_type,
+    time_control: updates.timeControl || updates.time_control,
+    increment: updates.increment,
+    rounds: updates.rounds,
+    max_players: updates.maxPlayers || updates.max_players,
+    min_rating: updates.minRating || updates.min_rating,
+    is_rated: pickDefined(updates.isRated, updates.is_rated),
+    fide_id: pickDefined(updates.fideId, updates.fide_id),
+    aicf_id: pickDefined(updates.aicfId, updates.aicf_id),
+    is_private: pickDefined(updates.isPrivate, updates.is_private),
+    status: updates.status,
+  };
+
+  // Remove undefined values
+  Object.keys(payload).forEach(
+    (key) => payload[key] === undefined && delete payload[key],
+  );
+
+  const response = await fetch(`${API_URL}/tournaments/${id}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to update tournament");
+  }
+
+  return await response.json();
 };
 
 /**
  * Delete tournament (Coming soon in backend)
  */
 export const deleteTournament = async (id) => {
-  // Logic will be added when backend endpoint exists
+  const response = await fetch(`${API_URL}/tournaments/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    let errorMsg = "Failed to delete tournament";
+    try {
+      const errorData = await response.json();
+      if (errorData.detail) errorMsg = errorData.detail;
+    } catch (e) {
+      // Ignored if json parsing fails
+    }
+    throw new Error(errorMsg);
+  }
+
+  return true;
 };
 
 // ==================== PLAYER REGISTRATION ====================
@@ -589,8 +698,51 @@ export const validateTournament = (data) => {
     errors.push("Start date is required");
   }
 
-  if (!data.type) {
-    errors.push("Tournament type is required");
+  if (!data.startTime) {
+    errors.push("Start time is required");
+  }
+
+  if (!data.venueName || data.venueName.trim().length < 2) {
+    errors.push("Venue name is required");
+  }
+
+  if (!data.city || data.city.trim().length < 2) {
+    errors.push("City is required");
+  }
+
+  if (!data.country || data.country.trim().length < 2) {
+    errors.push("Country is required");
+  }
+
+  if (!data.contactPerson || data.contactPerson.trim().length < 2) {
+    errors.push("Contact person is required");
+  }
+
+  if (
+    !data.contactEmail ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contactEmail)
+  ) {
+    errors.push("Valid contact email is required");
+  }
+
+  if (!data.contactPhone || !/^\+?[\d\s\-()]{10,15}$/.test(data.contactPhone)) {
+    errors.push("Valid contact phone is required");
+  }
+
+  if (!data.organizerName || data.organizerName.trim().length < 2) {
+    errors.push("Organizer name is required");
+  }
+
+  if (!data.registrationType) {
+    errors.push("Registration type is required");
+  }
+
+  if (!data.pairingSystem) {
+    errors.push("Pairing system is required");
+  }
+
+  if (!data.eventType) {
+    errors.push("Tournament category is required");
   }
 
   if (!data.timeControl || parseInt(data.timeControl) < 1) {
@@ -605,7 +757,17 @@ export const validateTournament = (data) => {
     errors.push("Entry fee cannot be negative");
   }
 
+  if (
+    data.registrationType === "Paid" &&
+    (!data.entryFee || parseFloat(data.entryFee) <= 0)
+  ) {
+    errors.push("Entry fee must be greater than 0 for paid tournaments");
+  }
+
   if (data.isRated) {
+    if (!data.fideId && !data.aicfId && !data.kscaId) {
+      errors.push("At least one rating ID is required for rated tournaments");
+    }
     ["fideId", "aicfId", "kscaId"].forEach((field) => {
       if (data[field] && !/^[a-zA-Z0-9]+$/.test(data[field])) {
         errors.push(`${field} must be alphanumeric`);
@@ -629,6 +791,200 @@ export const validateTournament = (data) => {
     isValid: errors.length === 0,
     errors,
   };
+};
+
+// ==================== REGISTRATION FORM MANAGEMENT ====================
+
+/**
+ * Get registration form fields for a tournament
+ */
+export const getRegistrationFormFields = async (tournamentId) => {
+  try {
+    const response = await fetch(
+      `${API_URL}/tournaments/${tournamentId}/registration-form-fields`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    if (!response.ok) return [];
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching registration form fields:", error);
+    return [];
+  }
+};
+
+/**
+ * Save registration form fields for a tournament
+ */
+export const saveRegistrationFormFields = async (tournamentId, fields) => {
+  try {
+    if (!Array.isArray(fields) || fields.length === 0) {
+      throw new Error("Add at least one registration field before saving");
+    }
+
+    for (const field of fields) {
+      const normalizedFieldName = (
+        field.field_name ||
+        field.label ||
+        ""
+      ).trim();
+      if (normalizedFieldName.length < 2) {
+        throw new Error("Each field name must be at least 2 characters");
+      }
+    }
+
+    // First, delete all existing fields
+    const existingFields = await getRegistrationFormFields(tournamentId);
+    for (const field of existingFields) {
+      await fetch(
+        `${API_URL}/tournaments/${tournamentId}/registration-form-fields/${field.field_id}`,
+        {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        },
+      );
+    }
+
+    // Then add new fields
+    const savedFields = [];
+    for (const field of fields) {
+      const payload = {
+        field_name: field.field_name || field.label,
+        field_type: field.field_type || field.type,
+        is_required: field.is_required || field.required || false,
+        field_order: field.field_order || fields.indexOf(field),
+      };
+
+      const response = await fetch(
+        `${API_URL}/tournaments/${tournamentId}/registration-form-fields`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to save field: ${field.field_name}`);
+      }
+
+      const savedField = await response.json();
+      savedFields.push(savedField);
+    }
+
+    return savedFields;
+  } catch (error) {
+    console.error("Error saving registration form fields:", error);
+    throw error;
+  }
+};
+
+// ==================== TOURNAMENT VIEW DETAILS APIs ====================
+
+export const getTournamentViewDetails = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/view-details`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to load tournament details");
+  }
+
+  return await response.json();
+};
+
+export const submitTournamentRegistration = async (tournamentId, formData) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ form_data: formData || {} }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to register for tournament");
+  }
+
+  return await response.json();
+};
+
+export const getTournamentRegistrationsApi = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to load registrations");
+  }
+
+  return await response.json();
+};
+
+export const updateTournamentRegistrationStatus = async (
+  tournamentId,
+  registrationId,
+  status,
+) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations/${registrationId}/status`,
+    {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to update registration status");
+  }
+
+  return await response.json();
+};
+
+export const getTournamentPairings = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/pairings`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to load pairings");
+  }
+
+  return await response.json();
+};
+
+export const startTournamentPairing = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/pairings/start`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to start pairings");
+  }
+
+  return await response.json();
 };
 
 // ==================== TOURNAMENT LIFECYCLE ====================
