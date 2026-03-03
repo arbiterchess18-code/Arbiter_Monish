@@ -215,7 +215,7 @@ export default function TournamentDetails() {
     (tournament.status === "upcoming" || tournament.status === "published") &&
     approvedRegistrations.length < parseInt(tournament.max_players || 64);
 
-  const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
   const isRegistered = registrations.some(
     (r) => r.user_email === userData.email,
   );

@@ -190,3 +190,17 @@ class RatingHistory(Base):
     new_rating = Column(Integer)
     rating_change = Column(Integer)
     calculated_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    notification_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.tournament_id", ondelete="CASCADE"), nullable=True)
+    type = Column(String(50), nullable=False)   # e.g. RESULT_UPDATE, ROUND_PAIRING
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
+
+    user = relationship("User", backref="notifications")
+    tournament = relationship("Tournament", backref="notifications")

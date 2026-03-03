@@ -38,7 +38,7 @@ const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { role } = useRole();
-  const token = localStorage.getItem("authToken");
+  const token = sessionStorage.getItem("authToken");
 
   if (!token) return <Navigate to="/login" replace />;
   if (allowedRole && role !== allowedRole)
@@ -49,7 +49,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
 const HomeRedirect = () => {
   const { role } = useRole();
-  const token = localStorage.getItem("authToken");
+  const token = sessionStorage.getItem("authToken");
 
   if (!token) return <Navigate to="/login" replace />;
   if (role === "arbiter") return <Navigate to="/arbiter-userhome" replace />;

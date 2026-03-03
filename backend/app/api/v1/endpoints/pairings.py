@@ -6,6 +6,7 @@ from .... import models
 from ....database import get_db
 from ....core.security import get_current_user, is_tournament_creator_or_admin, get_password_hash
 from ....schemas.match import PairingResponse, MatchResultUpdate
+from ....services import notification_service
 
 router = APIRouter()
 
@@ -75,6 +76,17 @@ async def submit_match_result(
         black_reg.current_points = float(black_reg.current_points or 0) + get_points(new_result, "black")
 
     db.commit()
+
+    # Fire result notifications for both players (skip BYE — black is None)
+    if match.black_player_id and new_result in ("1-0", "0-1", "1/2-1/2"):
+        notification_service.notify_match_result(
+            db,
+            match=match,
+            tournament=tournament,
+            result=new_result,
+        )
+        db.commit()
+
     return {"message": "Result updated successfully", "white_points": float(white_reg.current_points if white_reg else 0)}
 
 @router.get("/{tournament_id}/pairings", response_model=PairingResponse)
@@ -228,6 +240,19 @@ async def start_pairing_round(
         tournament.status = "active"
 
     db.commit()
+
+    # Notify all players that round pairings are ready
+    player_ids = [
+        reg.user_id for reg in approved_registrations if reg.user_id
+    ]
+    notification_service.notify_round_pairing(
+        db,
+        tournament=tournament,
+        round_number=next_round,
+        player_ids=player_ids,
+    )
+    db.commit()
+
     return {"message": f"Round {next_round} pairings generated successfully"}
 
 @router.post("/{tournament_id}/seed-players")

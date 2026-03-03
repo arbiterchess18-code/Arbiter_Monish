@@ -4,14 +4,14 @@ const RoleContext = createContext(undefined);
 
 export function RoleProvider({ children }) {
   const [role, setRole] = useState(() => {
-    const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+    const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
     return userData.role || null;
   });
 
   // Listen for login/logout events
   useEffect(() => {
     const handleAuthChange = () => {
-      const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+      const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
       setRole(userData.role || null);
     };
 

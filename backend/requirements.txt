@@ -10,3 +10,4 @@ bcrypt
 passlib[bcrypt]
 PyJWT
 email-validator
+slowapi

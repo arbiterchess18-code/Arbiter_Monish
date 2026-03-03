@@ -30,7 +30,7 @@ export default function OverviewTab({ tournament, canRegister }) {
   const { role } = useRole();
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const currentUser = JSON.parse(localStorage.getItem("userData") || "{}");
+  const currentUser = JSON.parse(sessionStorage.getItem("userData") || "{}");
 
   const isPlayerRegistered = tournament.registeredPlayers?.some(
     (p) => p.email === currentUser.email,

@@ -43,8 +43,8 @@ export function AppSidebar() {
   const { role, setRole } = useRole();
 
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userData");
+    sessionStorage.removeItem("authToken");
+    sessionStorage.removeItem("userData");
     window.dispatchEvent(new Event("authChange"));
     window.location.href = "/login";
   };

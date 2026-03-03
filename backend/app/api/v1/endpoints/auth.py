@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -10,11 +10,13 @@ from ....core.security import verify_password, get_password_hash, create_access_
 from ....core.config import ACCESS_TOKEN_EXPIRE_MINUTES
 from ....schemas.token import Token
 from ....schemas.user import UserCreate
+from ....core.limiter import limiter
 
 router = APIRouter()
 
 @router.post("/token", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(
         models.User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -39,6 +41,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         "access_token": access_token,
         "token_type": "bearer",
         "userData": {
+            "user_id": user.user_id,          # needed for Supabase Realtime filter
             "firstName": user.first_name or user.username,
             "lastName": user.last_name or "",
             "email": user.email,

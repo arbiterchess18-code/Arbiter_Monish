@@ -5,14 +5,15 @@ import { useRole } from "@/lib/role-context";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 
 export function AppLayout({ children }) {
   const { role } = useRole();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    localStorage.removeItem("userData");
-    localStorage.removeItem("authToken");
+    sessionStorage.removeItem("userData");
+    sessionStorage.removeItem("authToken");
     window.dispatchEvent(new Event("authChange"));
     navigate("/login");
   };
@@ -31,6 +32,7 @@ export function AppLayout({ children }) {
                 {role === "arbiter" ? "Arbiter Mode" : "Player Mode"}
               </div>
               <ThemeToggle />
+              <NotificationBell />
               <Button
                 variant="ghost"
                 size="icon"

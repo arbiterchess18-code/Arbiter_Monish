@@ -60,7 +60,7 @@ export function JoinTournamentDialog({
   if (!tournament) return null;
 
   // Pre-fill from userData if available
-  const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
   if (userData.email && !formData.email) {
     setFormData({
       ...formData,

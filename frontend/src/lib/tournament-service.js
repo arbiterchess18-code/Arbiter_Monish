@@ -3,10 +3,10 @@
  * Handles tournament operations, Swiss pairing, tie-breakers, and player management
  */
 
-const API_URL = "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem("authToken");
+  const token = sessionStorage.getItem("authToken");
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -19,8 +19,8 @@ const getAuthHeaders = () => {
 const handleResponse = async (response) => {
   if (response.status === 401) {
     // Session expired or invalid
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userData");
+    sessionStorage.removeItem("authToken");
+    sessionStorage.removeItem("userData");
     window.dispatchEvent(new Event("authChange"));
 
     // Use a slight delay to allow the current flow to finish
