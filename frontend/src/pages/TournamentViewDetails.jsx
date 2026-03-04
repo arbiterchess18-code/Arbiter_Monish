@@ -319,9 +319,7 @@ export default function TournamentViewDetails() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[360px]">
-        <div className="text-muted-foreground">
-          Loading tournament details...
-        </div>
+        <div className="loader"></div>
       </div>
     );
   }
@@ -495,8 +493,8 @@ export default function TournamentViewDetails() {
           </TabsContent>
         ) : null}
 
-        {tabs.includes("registrations") ? (
-          <TabsContent value="registrations" className="space-y-4">
+        {tabs.includes("participants") ? (
+          <TabsContent value="participants" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <Card>
                 <CardContent className="pt-5">
@@ -710,8 +708,8 @@ export default function TournamentViewDetails() {
           </Card>
         </TabsContent>
 
-        {tabs.includes("settings") ? (
-          <TabsContent value="settings" className="space-y-4">
+        {tabs.includes("standings") ? (
+          <TabsContent value="standings" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">

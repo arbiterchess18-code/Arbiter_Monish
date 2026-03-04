@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any
 import json
 
@@ -10,6 +10,7 @@ from ....schemas.registration import (
     TournamentRegistrationCreate, TournamentRegistrationResponse, 
     TournamentRegistrationStatusUpdate, RegistrationFormFieldCreate, RegistrationFormFieldResponse
 )
+from ....services import notification_service
 
 router = APIRouter()
 
@@ -132,14 +133,15 @@ async def get_tournament_registrations(
         raise HTTPException(
             status_code=403, detail="Only tournament creator or admin can view registrations")
 
-    registrations = db.query(models.TournamentRegistration).filter(
+    registrations = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
         models.TournamentRegistration.tournament_id == tournament_id
     ).order_by(models.TournamentRegistration.registration_date.desc()).all()
 
     response = []
     for registration in registrations:
-        user = db.query(models.User).filter(
-            models.User.user_id == registration.user_id).first()
+        user = registration.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip(
         ) or user.username
         response.append({
@@ -183,6 +185,16 @@ async def update_registration_status(
     registration.status = status_update.status
     db.commit()
     db.refresh(registration)
+
+    # Notify player of status change
+    notification_service.notify_registration_status(
+        db,
+        user_id=registration.user_id,
+        tournament_name=tournament.tournament_name,
+        tournament_id=tournament.tournament_id,
+        status=registration.status
+    )
+    db.commit()
 
     user = db.query(models.User).filter(
         models.User.user_id == registration.user_id).first()

@@ -109,7 +109,7 @@ export default function TournamentsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="text-muted-foreground animate-pulse">Searching for tournaments...</div>
+          <div className="loader"></div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">

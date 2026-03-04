@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Trophy,
   Users,
@@ -38,6 +45,7 @@ import {
   getTournamentPairings,
   startTournamentPairing,
   updateMatchResult,
+  seedTournamentPlayers,
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
@@ -53,6 +61,7 @@ const statusColors = {
 export default function TournamentDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { role } = useRole();
   const [tournament, setTournament] = useState(null);
   const [standings, setStandings] = useState([]);
@@ -65,10 +74,19 @@ export default function TournamentDetails() {
   const [pairings, setPairings] = useState([]);
   const [pairingsLoading, setPairingsLoading] = useState(false);
   const [generatingPairings, setGeneratingPairings] = useState(false);
+  const [standingsSort, setStandingsSort] = useState("points");
+  const [selectedRound, setSelectedRound] = useState(1);
 
   useEffect(() => {
     loadTournament();
-  }, [id]);
+
+    // Parse tab from query params
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [id, location.search]);
 
   const loadTournament = async () => {
     try {
@@ -85,15 +103,21 @@ export default function TournamentDetails() {
         id: data.tournament_id,
         name: data.tournament_name,
         // Ensure registeredPlayers is always an array
-        registeredPlayers: data.registeredPlayers || []
+        registeredPlayers: data.registeredPlayers || [],
+        timeControl: data.time_control,
+        entryFee: data.entry_fee,
+        currentRound: data.current_round
       };
 
       setTournament(mappedData);
 
-      if (mappedData.status === "active" || mappedData.status === "completed") {
-        const standingsData = await getStandings(id);
-        setStandings(standingsData || []);
+      // Initialize selectedRound to current round if not set
+      if (data.current_round > 0) {
+        setSelectedRound(prev => (prev === 1 ? data.current_round : prev));
       }
+
+      const standingsData = await getStandings(id);
+      setStandings(standingsData?.standings || []);
 
       // Always fetch registrations to be sure
       const registrationsData = await getTournamentRegistrations(id);
@@ -135,6 +159,8 @@ export default function TournamentDetails() {
     try {
       await updateRegistrationStatus(id, regId, newStatus);
       toast.success(`Player ${newStatus}!`);
+      // Reload everything to update registration counts and stats
+      loadTournament();
     } catch (error) {
       toast.error(`Failed to update status: ${error.message}`);
       // Rollback on failure by reloading from server
@@ -150,11 +176,24 @@ export default function TournamentDetails() {
     try {
       await updateMatchResult(id, matchId, result);
       toast.success(`Result saved: ${result}`);
-      // Refresh standings after scoring
-      if (tournament?.status === "active") {
-        const standingsData = await getStandings(id);
-        setStandings(standingsData || []);
+
+      // Check if this was the last result of the final round
+      const updatedPairings = pairings.map((m) => (m.match_id === matchId ? { ...m, result } : m));
+      const allResultsEntered = updatedPairings.every(p => p.result !== null && p.result !== "");
+      const isFinalRound = tournament?.current_round === tournament?.rounds;
+
+      if (isFinalRound && allResultsEntered) {
+        toast.success("Tournament Finished! Redirecting to Final Standings...", { duration: 4000 });
+        setActiveTab("standings");
       }
+
+      // Refresh standings after scoring
+      const standingsData = await getStandings(id);
+      setStandings(standingsData?.standings || []);
+
+      // Refresh pairings to ensure we have the latest results for dependency checks
+      const pairingsData = await getTournamentPairings(id);
+      setPairings(pairingsData?.pairings || []);
     } catch (error) {
       toast.error(`Failed to save result: ${error.message}`);
       loadTournament();
@@ -166,9 +205,19 @@ export default function TournamentDetails() {
     try {
       await startTournamentPairing(id);
       toast.success("Next round pairings generated!");
-      const pairingsData = await getTournamentPairings(id);
-      setPairings(pairingsData?.pairings || []);
-      loadTournament();
+
+      // 1. Reload tournament data to update currentRound
+      await loadTournament();
+
+      // 2. Explicitly refresh standings to reflect scores from the round just completed
+      const standingsData = await getStandings(id);
+      setStandings(standingsData?.standings || []);
+
+      // 3. Update the UI to show the newly created round
+      const freshData = await getTournamentById(id);
+      if (freshData && freshData.current_round) {
+        setSelectedRound(freshData.current_round);
+      }
     } catch (error) {
       toast.error(error.message || "Failed to generate pairings");
     } finally {
@@ -193,10 +242,22 @@ export default function TournamentDetails() {
     }
   };
 
+  const handleSeedPlayers = async () => {
+    try {
+      setLoading(true);
+      await seedTournamentPlayers(id);
+      toast.success("Tournament filled with dummy players!");
+      await loadTournament();
+    } catch (error) {
+      toast.error(error.message || "Failed to seed players");
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-muted-foreground">Loading tournament...</div>
+        <div className="loader"></div>
       </div>
     );
   }
@@ -210,6 +271,20 @@ export default function TournamentDetails() {
   const pendingRegistrations = registrations.filter(
     (r) => r.status === "pending"
   );
+
+  const filteredPairings = pairings.filter(p => p.round_number === selectedRound);
+  const incompleteMatches = filteredPairings.filter(p => !p.result).length;
+
+  const sortedStandings = [...standings].sort((a, b) => {
+    // Primary sort by points
+    if (b.points !== a.points) return (b.points || 0) - (a.points || 0);
+    // Secondary sort by TB1 (Buchholz Cut 1)
+    if (b.buchholz !== a.buchholz) return (b.buchholz || 0) - (a.buchholz || 0);
+    // Tertiary sort by TB2 (Buchholz Total)
+    if (b.buchholz_total !== a.buchholz_total) return (b.buchholz_total || 0) - (a.buchholz_total || 0);
+    // Quaternary sort by TB3 (Sonneborn-Berger)
+    return (b.sonneborn_berger || 0) - (a.sonneborn_berger || 0);
+  });
 
   const canRegister =
     (tournament.status === "upcoming" || tournament.status === "published") &&
@@ -349,9 +424,9 @@ export default function TournamentDetails() {
             </div>
             <div>
               <div className="text-2xl font-bold">
-                {tournament.prizePool || "Medals"}
+                ₹{tournament.entryFee || 0}
               </div>
-              <div className="text-xs text-muted-foreground">Prizes</div>
+              <div className="text-xs text-muted-foreground">Entry Fee</div>
             </div>
           </div>
         </motion.div>
@@ -362,15 +437,9 @@ export default function TournamentDetails() {
         <TabsList className="w-full justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
+          <TabsTrigger value="standings">Live Standings</TabsTrigger>
           {isArbiter && (
             <TabsTrigger value="pairings">Pairings</TabsTrigger>
-          )}
-          {(tournament.status === "active" ||
-            tournament.status === "completed") && (
-              <TabsTrigger value="standings">Standings</TabsTrigger>
-            )}
-          {tournament.description && (
-            <TabsTrigger value="details">Details</TabsTrigger>
           )}
         </TabsList>
 
@@ -461,6 +530,11 @@ export default function TournamentDetails() {
               <CardTitle className="flex justify-between items-center">
                 <span>Registered Participants</span>
                 <div className="flex gap-2">
+                  {isArbiter && (
+                    <Button variant="outline" size="sm" onClick={handleSeedPlayers} className="border-chess-gold text-chess-gold hover:bg-chess-gold/10">
+                      Seed Dummy Players
+                    </Button>
+                  )}
                   {isArbiter && (
                     <Button variant="default" size="sm" onClick={() => setIsManualDialogOpen(true)}>
                       Add Onsite Player
@@ -630,24 +704,57 @@ export default function TournamentDetails() {
         <TabsContent value="pairings" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex justify-between items-center flex-wrap gap-2">
-                <span>
-                  Round {tournament.current_round || 0} Pairings &amp; Results
-                </span>
+              <CardTitle className="flex justify-between items-center flex-wrap gap-4">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold">Pairings & Results</span>
+                  {tournament.current_round > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">Select Round:</span>
+                      <Select
+                        value={selectedRound.toString()}
+                        onValueChange={(val) => setSelectedRound(parseInt(val))}
+                      >
+                        <SelectTrigger className="h-9 w-32">
+                          <SelectValue placeholder="Round" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: tournament.current_round || 0 }, (_, i) => (
+                            <SelectItem key={i + 1} value={(i + 1).toString()}>
+                              Round {i + 1}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
                 {isArbiter && (
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleGenerateNextRound}
-                      disabled={generatingPairings}
-                    >
-                      <Play className="h-4 w-4 mr-1" />
-                      {generatingPairings
-                        ? "Generating..."
-                        : tournament.current_round === 0
-                          ? "Start Round 1"
-                          : `Generate Round ${(tournament.current_round || 0) + 1}`}
-                    </Button>
+                    {tournament.current_round === tournament.rounds && incompleteMatches === 0 ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setActiveTab("standings")}
+                        className="bg-success text-success-foreground hover:bg-success/90"
+                      >
+                        <Trophy className="h-4 w-4 mr-1" />
+                        Complete Tournament
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={handleGenerateNextRound}
+                        disabled={generatingPairings || (tournament.current_round > 0 && incompleteMatches > 0)}
+                        title={incompleteMatches > 0 ? `Enter results for ${incompleteMatches} more matches to generate next round` : ""}
+                      >
+                        <Play className="h-4 w-4 mr-1" />
+                        {generatingPairings
+                          ? "Generating..."
+                          : tournament.current_round === 0
+                            ? "Start Round 1"
+                            : `Generate Round ${(tournament.current_round || 0) + 1}`}
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardTitle>
@@ -666,20 +773,20 @@ export default function TournamentDetails() {
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-14 text-center">Board</TableHead>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="w-16 text-center">Board #</TableHead>
                       <TableHead>White</TableHead>
-                      <TableHead className="text-center w-28">Result</TableHead>
+                      <TableHead className="text-center w-24">Score</TableHead>
                       <TableHead>Black</TableHead>
-                      {isArbiter && (
-                        <TableHead className="text-right">Enter Result</TableHead>
+                      {isArbiter && selectedRound === tournament.current_round && (
+                        <TableHead className="text-right w-48">Actions</TableHead>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pairings.map((match) => (
-                      <TableRow key={match.match_id}>
-                        <TableCell className="text-center font-medium">
+                    {filteredPairings.map((match) => (
+                      <TableRow key={match.match_id} className="h-12">
+                        <TableCell className="text-center font-bold text-muted-foreground border-r">
                           {match.board_number}
                         </TableCell>
                         <TableCell className="font-medium">
@@ -688,7 +795,7 @@ export default function TournamentDetails() {
                         <TableCell className="text-center">
                           <Badge
                             variant={match.result ? "default" : "outline"}
-                            className="font-mono text-xs"
+                            className={`font-mono px-3 py-1 ${match.result ? "bg-primary/20 text-primary border-primary/30" : "text-muted-foreground border-dashed"}`}
                           >
                             {match.result || "vs"}
                           </Badge>
@@ -698,7 +805,7 @@ export default function TournamentDetails() {
                             <span className="text-muted-foreground italic">BYE</span>
                           )}
                         </TableCell>
-                        {isArbiter && (
+                        {isArbiter && selectedRound === tournament.current_round && (
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
                               {["1-0", "1/2-1/2", "0-1"].map((r) => (
@@ -706,7 +813,7 @@ export default function TournamentDetails() {
                                   key={r}
                                   size="sm"
                                   variant={match.result === r ? "default" : "outline"}
-                                  className="h-7 px-2 text-xs font-mono"
+                                  className={`h-8 px-3 text-xs font-mono transition-all ${match.result === r ? "shadow-md bg-primary text-primary-foreground" : "hover:border-primary/50"}`}
                                   onClick={() =>
                                     handleUpdateResult(match.match_id, r)
                                   }
@@ -729,84 +836,67 @@ export default function TournamentDetails() {
         <TabsContent value="standings" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Current Standings</CardTitle>
+              <CardTitle className="flex justify-between items-center">
+                <span>Ranking after Round {tournament.currentRound || 0}</span>
+                <Button variant="outline" size="sm" onClick={loadTournament} className="border-chess-gold text-chess-gold hover:bg-chess-gold/10">
+                  Refresh Standings
+                </Button>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {standings.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No standings available yet
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">Rank</TableHead>
-                      <TableHead>Player</TableHead>
-                      <TableHead>Rating</TableHead>
-                      <TableHead className="text-center">Points</TableHead>
-                      <TableHead className="text-center">Buchholz</TableHead>
-                      <TableHead className="text-center">SB</TableHead>
-                      <TableHead className="text-center">W-D-L</TableHead>
+              <div className="border border-[#ccc] overflow-hidden rounded-sm">
+                <Table className="text-xs border-collapse">
+                  <TableHeader className="bg-[#f0f0f0] border-b border-[#ccc] text-[#333]">
+                    <TableRow className="hover:bg-transparent h-8">
+                      <TableHead className="w-10 text-center border-r border-[#ccc] font-bold">Rk.</TableHead>
+                      <TableHead className="w-10 text-center border-r border-[#ccc]">SNo</TableHead>
+                      <TableHead className="font-bold border-r border-[#ccc] text-left">Name</TableHead>
+                      <TableHead className="text-center w-12 border-r border-[#ccc]">FED</TableHead>
+                      <TableHead className="text-center w-14 border-r border-[#ccc]">Rtg</TableHead>
+                      <TableHead className="text-center w-12 border-r border-[#ccc] font-bold">Pts.</TableHead>
+                      <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz Cut 1">TB1</TableHead>
+                      <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz Total">TB2</TableHead>
+                      <TableHead className="text-center w-12" title="Sonneborn-Berger">TB3</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {standings.map((player) => (
-                      <TableRow key={player.id}>
-                        <TableCell className="font-bold">
-                          {player.rank}
+                    {sortedStandings.map((player, index) => (
+                      <TableRow
+                        key={player.user_id || index}
+                        className={`h-8 border-b border-[#eee] ${index % 2 === 0 ? "bg-white" : "bg-[#f5f5f5]"}`}
+                      >
+                        <TableCell className="text-center border-r border-[#ccc] font-bold">{index + 1}</TableCell>
+                        <TableCell className="text-center border-r border-[#ccc] text-[#666]">{player.starting_no || "-"}</TableCell>
+                        <TableCell className="font-medium border-r border-[#ccc] text-blue-700 hover:underline cursor-pointer">
+                          {player.player_name || player.name}
                         </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{player.name}</div>
-                          {player.title && (
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {player.title}
-                            </Badge>
-                          )}
+                        <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.federation || "IND"}</TableCell>
+                        <TableCell className="text-center border-r border-[#ccc]">{player.rating || "0"}</TableCell>
+                        <TableCell className="text-center font-bold border-r border-[#ccc] text-black">
+                          {parseFloat(player.points || 0).toFixed(1)}
                         </TableCell>
-                        <TableCell>{player.rating || "-"}</TableCell>
-                        <TableCell className="text-center font-semibold">
-                          {player.points || 0}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {player.buchholz?.toFixed(1) || "0.0"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {player.sonnebornBerger?.toFixed(2) || "0.00"}
-                        </TableCell>
-                        <TableCell className="text-center text-sm">
-                          <span className="text-success">
-                            {player.wins || 0}
-                          </span>
-                          -
-                          <span className="text-muted-foreground">
-                            {player.draws || 0}
-                          </span>
-                          -
-                          <span className="text-destructive">
-                            {player.losses || 0}
-                          </span>
-                        </TableCell>
+                        <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.buchholz?.toFixed(1) || "0.0"}</TableCell>
+                        <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.buchholz_total?.toFixed(1) || "0.0"}</TableCell>
+                        <TableCell className="text-center text-[#666]">{player.sonneborn_berger?.toFixed(2) || "0.00"}</TableCell>
                       </TableRow>
                     ))}
+                    {sortedStandings.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          No standings available yet
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="details" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tournament Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <p className="whitespace-pre-wrap">{tournament.description}</p>
+              </div>
+              <div className="mt-4 text-[10px] text-muted-foreground italic">
+                Annotation: Tie Break1: Buchholz Tie-Breaks (Cut 1), Tie Break2: Buchholz Tie-Breaks (Total), Tie Break3: Sonneborn-Berger Tie-Breaks
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+
       </Tabs>
 
       {/* Join Dialog */}
@@ -823,6 +913,6 @@ export default function TournamentDetails() {
         onClose={() => setIsManualDialogOpen(false)}
         onSubmit={handleManualRegistration}
       />
-    </div>
+    </div >
   );
 }

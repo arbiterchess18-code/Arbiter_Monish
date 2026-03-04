@@ -183,6 +183,7 @@ class TournamentUpdate(BaseModel):
 class TournamentResponse(TournamentBase):
     tournament_id: int
     status: str
+    current_round: int = 0
     created_at: datetime
     created_by: Optional[int] = None
     registered_count: int = 0

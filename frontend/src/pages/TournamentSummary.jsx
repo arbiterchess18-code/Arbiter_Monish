@@ -69,10 +69,7 @@ export default function TournamentSummary() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-muted-foreground">Loading tournament summary...</p>
-        </div>
+        <div className="loader"></div>
       </div>
     );
   }
@@ -281,16 +278,16 @@ export default function TournamentSummary() {
             </div>
             {(tournament.registration_type === "Paid" ||
               tournament.registrationType === "Paid") && (
-              <div>
-                <p className="text-xs text-muted-foreground">Entry Fee</p>
-                <p className="text-lg font-semibold text-primary">
-                  ₹
-                  {parseFloat(
-                    tournament.entry_fee || tournament.entryFee || 0,
-                  ).toFixed(2)}
-                </p>
-              </div>
-            )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Entry Fee</p>
+                  <p className="text-lg font-semibold text-primary">
+                    ₹
+                    {parseFloat(
+                      tournament.entry_fee || tournament.entryFee || 0,
+                    ).toFixed(2)}
+                  </p>
+                </div>
+              )}
             <div>
               <p className="text-xs text-muted-foreground">Tournament Status</p>
               <Badge

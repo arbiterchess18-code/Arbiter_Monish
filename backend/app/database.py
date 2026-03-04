@@ -13,7 +13,16 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./chess_orbiter.db")
 # For SQLite, we need to allow multithreading
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+engine_kwargs = {"connect_args": connect_args}
+if getattr(DATABASE_URL, "startswith", lambda x: False)("postgresql"):
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300  # Recycle connections after 5 minutes
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+elif DATABASE_URL.startswith("sqlite"):
+    pass # SQLite defaults are fine for development
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

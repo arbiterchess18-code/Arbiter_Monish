@@ -316,21 +316,12 @@ export const manualRegisterPlayer = async (tournamentId, manualData) => {
 };
 
 /**
- * Unregister a player from a tournament
+ * Unregister a player from a tournament (Coming soon in backend)
  */
-export const unregisterPlayer = (tournamentId, playerId) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-  if (tournament.status !== "upcoming")
-    throw new Error("Cannot unregister after tournament starts");
-
-  tournament.registeredPlayers = tournament.registeredPlayers.filter(
-    (p) => p.id !== playerId,
-  );
-  updateTournament(tournamentId, {
-    registeredPlayers: tournament.registeredPlayers,
-  });
+export const unregisterPlayer = async (tournamentId, playerId) => {
+  // Mocking for now, as there's no backend endpoint for this yet
+  console.warn("unregisterPlayer is not yet implemented on the backend");
+  return true;
 };
 
 // ==================== SWISS PAIRING SYSTEM ====================
@@ -563,31 +554,19 @@ export const calculateTieBreakers = (tournament) => {
 };
 
 /**
- * Get tournament standings with tie-breakers
+ * Get tournament standings with tie-breakers (Real API)
  */
-export const getStandings = (tournamentId) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-
-  // Calculate tie-breakers if not already done
-  calculateTieBreakers(tournament);
-
-  // Sort by points, then Buchholz, then Sonneborn-Berger, then rating
-  const standings = [...tournament.registeredPlayers].sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.buchholz !== a.buchholz) return b.buchholz - a.buchholz;
-    if (b.sonnebornBerger !== a.sonnebornBerger)
-      return b.sonnebornBerger - a.sonnebornBerger;
-    return (b.rating || 0) - (a.rating || 0);
-  });
-
-  // Add ranks
-  standings.forEach((player, index) => {
-    player.rank = index + 1;
-  });
-
-  return standings;
+export const getStandings = async (tournamentId) => {
+  try {
+    const response = await fetch(`${API_URL}/tournaments/${tournamentId}/standings`);
+    await handleResponse(response);
+    if (!response.ok) throw new Error("Failed to fetch standings");
+    const data = await response.json();
+    return data; // Return full object { standings: [...], tie_breaker_rules: [...] }
+  } catch (error) {
+    console.error("Error fetching standings:", error);
+    return { standings: [] };
+  }
 };
 
 // ==================== ROUND ROBIN PAIRING ====================
@@ -1039,35 +1018,35 @@ export const updateMatchResult = async (tournamentId, matchId, result) => {
 /**
  * Start a tournament
  */
-export const startTournament = (tournamentId) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-  if (tournament.status !== "upcoming")
-    throw new Error("Tournament already started");
-  if (tournament.registeredPlayers.length < 2)
-    throw new Error("Need at least 2 players");
-
-  updateTournament(tournamentId, {
-    status: "active",
-    startedAt: new Date().toISOString(),
+export const startTournament = async (tournamentId) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ status: "active" }),
   });
 
-  return tournament;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to start tournament");
+  }
+
+  return await response.json();
 };
 
 /**
  * Complete a tournament
  */
-export const completeTournament = (tournamentId) => {
-  const tournament = getTournamentById(tournamentId);
-
-  if (!tournament) throw new Error("Tournament not found");
-
-  updateTournament(tournamentId, {
-    status: "completed",
-    completedAt: new Date().toISOString(),
+export const completeTournament = async (tournamentId) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ status: "completed" }),
   });
 
-  return tournament;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to complete tournament");
+  }
+
+  return await response.json();
 };

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from .... import models
@@ -155,10 +155,10 @@ async def get_tournament_view_details(
         models.Round.tournament_id == tournament_id
     ).count()
 
-    available_tabs = ["overview", "pairings"]
+    available_tabs = ["overview", "participants", "pairings", "standings"]
     if can_manage:
         available_tabs = ["overview", "participants",
-                          "registrations", "pairings", "settings"]
+                          "registrations", "pairings", "standings", "settings"]
 
     return {
         "tournament": tournament,
@@ -179,38 +179,147 @@ async def get_tournament_view_details(
 @router.get("/{tournament_id}/standings")
 async def get_standings(
     tournament_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
+    import json
     tournament = db.query(models.Tournament).filter(
         models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    registrations = db.query(models.TournamentRegistration).filter(
+    registrations = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
         models.TournamentRegistration.status.in_(["approved", "active"])
     ).all()
 
+    # Initialize points for all approved players
+    player_points = {reg.user_id: 0.0 for reg in registrations}
+    
+    player_data = {reg.user_id: {
+        "opponent_scores": [],
+        "sonneborn_berger": 0.0,
+        "seed": reg.seed or 0
+    } for reg in registrations}
+
+    # Fetch all completed matches for the tournament
+    matches = db.query(models.Match).filter(
+        models.Match.tournament_id == tournament_id,
+        models.Match.result.isnot(None)
+    ).all()
+
+    # Calculate points and tie-breaker components from matches
+    for match in matches:
+        w_id = match.white_player_id
+        b_id = match.black_player_id
+        res = match.result
+
+        if not w_id:
+            continue
+
+        # Map results to points
+        w_pts_inc = 0.0
+        b_pts_inc = 0.0
+        if res == "1-0":
+            w_pts_inc = 1.0
+        elif res == "0-1":
+            b_pts_inc = 1.0
+        elif res == "1/2-1/2":
+            w_pts_inc = 0.5
+            b_pts_inc = 0.5
+        elif res == "Bye": # Explicit Bye result
+            w_pts_inc = 1.0
+
+        # Update points
+        if w_id in player_points:
+            player_points[w_id] += w_pts_inc
+        if b_id and b_id in player_points:
+            player_points[b_id] += b_pts_inc
+
+        # Tie-breaker logic (only if both players are present)
+        if w_id in player_data and b_id and b_id in player_data:
+            # We will use the final points for Buchholz, so we just collect opponents for now
+            # Note: Standard Buchholz uses the opponent's FINAL score.
+            # We'll calculate Buchholz in a second pass after all points are summed.
+            player_data[w_id]["opponent_ids"] = player_data[w_id].get("opponent_ids", []) + [b_id]
+            player_data[b_id]["opponent_ids"] = player_data[b_id].get("opponent_ids", []) + [w_id]
+
+            # SB is based on opponent's current points relative to the result
+            # Actually, standard SB also uses FINAL points.
+            # But we can only calculate it accurately after we have all player_points.
+
+    # Second pass: Calculate Tie-breakers using the summed player_points
+    for match in matches:
+        w_id = match.white_player_id
+        b_id = match.black_player_id
+        res = match.result
+        
+        if w_id in player_data and b_id and b_id in player_data:
+            w_pts = player_points[w_id]
+            b_pts = player_points[b_id]
+            
+            # Buchholz components
+            player_data[w_id]["opponent_scores"].append(player_points[b_id])
+            player_data[b_id]["opponent_scores"].append(player_points[w_id])
+            
+            # SB calculation
+            if res == "1-0":
+                player_data[w_id]["sonneborn_berger"] += player_points[b_id]
+            elif res == "0-1":
+                player_data[b_id]["sonneborn_berger"] += player_points[w_id]
+            elif res == "1/2-1/2":
+                player_data[w_id]["sonneborn_berger"] += (player_points[b_id] / 2.0)
+                player_data[b_id]["sonneborn_berger"] += (player_points[w_id] / 2.0)
+
     standings = []
     for registration in registrations:
-        player = db.query(models.User).filter(
-            models.User.user_id == registration.user_id).first()
+        player = registration.user
+        uid = registration.user_id
+        data = player_data[uid]
+        opp_scores = data["opponent_scores"]
+        
+        # Buchholz Total
+        bh_total = sum(opp_scores)
+        # Buchholz Cut 1 (Standard)
+        bh_cut1 = bh_total - min(opp_scores) if opp_scores else 0.0
+
+        # Try to extract extra info from registration payload
+        extra_info = {}
+        try:
+            if registration.color_history and registration.color_history.startswith("{"):
+                extra_info = json.loads(registration.color_history)
+        except:
+            pass
+
+        title = extra_info.get("title", "")
+        base_name = f"{player.first_name or ''} {player.last_name or ''}".strip() or player.username
+        full_name = f"{title} {base_name}".strip()
+
+        # Determine federation: extra_info -> player.country -> default "IND"
+        fed = extra_info.get("federation")
+        if not fed:
+            country = player.country or "India"
+            fed = "IND" if country.lower() == "india" else country[:3].upper()
+
         standings.append({
-            "user_id": registration.user_id,
-            "player_name": f"{player.first_name or ''} {player.last_name or ''}".strip() or player.username,
-            "points": float(registration.current_points or 0),
-            "buchholz": 0.0,
-            "sonneborn_berger": 0.0,
-            "wins_with_black": 0,
+            "user_id": uid,
+            "starting_no": data["seed"],
+            "player_name": full_name,
+            "federation": fed,
+            "rating": player.fide_rating or player.national_rating or 0,
+            "points": player_points[uid],
+            "buchholz": bh_cut1,
+            "buchholz_total": bh_total,
+            "sonneborn_berger": data["sonneborn_berger"],
         })
 
     standings.sort(
         key=lambda item: (
             item["points"],
             item["buchholz"],
+            item["buchholz_total"],
             item["sonneborn_berger"],
-            item["wins_with_black"],
         ),
         reverse=True,
     )
@@ -219,6 +328,6 @@ async def get_standings(
         item["rank"] = idx
 
     return {
-        "tie_breaker_rules": ["Buchholz", "Sonneborn-Berger", "Wins with Black"],
+        "tie_breaker_rules": ["Buchholz Cut 1", "Buchholz Total", "Sonneborn-Berger"],
         "standings": standings,
     }

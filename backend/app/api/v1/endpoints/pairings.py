@@ -171,6 +171,22 @@ async def start_pairing_round(
         raise HTTPException(
             status_code=400, detail="All configured rounds are already generated")
 
+    if tournament.current_round and tournament.current_round > 0:
+        prev_round = db.query(models.Round).filter(
+            models.Round.tournament_id == tournament_id,
+            models.Round.round_number == tournament.current_round
+        ).first()
+        if prev_round:
+            incomplete_matches = db.query(models.Match).filter(
+                models.Match.round_id == prev_round.round_id,
+                models.Match.result == None
+            ).count()
+            if incomplete_matches > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot start Round {next_round}: {incomplete_matches} matches from Round {tournament.current_round} have no result entered."
+                )
+
     round_record = models.Round(
         tournament_id=tournament_id,
         round_number=next_round,
@@ -286,6 +302,7 @@ async def seed_players(
                 email=p_data["email"],
                 hashed_password=get_password_hash("password123"),
                 first_name=p_data["name"],
+                country="India",
                 is_active=True
             )
             db.add(user)

@@ -96,6 +96,27 @@ def notify_round_pairing(
         )
 
 
+def notify_registration_status(
+    db: Session,
+    *,
+    user_id: int,
+    tournament_name: str,
+    tournament_id: int,
+    status: str,
+) -> None:
+    """Notify a player when their registration status changes (Approved/Rejected)."""
+    msg = f"Your registration for {tournament_name} has been {status}."
+    notif_type = NotifType.REGISTRATION_APPROVED if status == "approved" else NotifType.REGISTRATION_REJECTED
+
+    create_notification(
+        db,
+        user_id=user_id,
+        notif_type=notif_type,
+        message=msg,
+        tournament_id=tournament_id,
+    )
+
+
 def get_user_notifications(
     db: Session,
     *,

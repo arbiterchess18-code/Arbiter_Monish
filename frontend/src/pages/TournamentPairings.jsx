@@ -114,13 +114,18 @@ export default function TournamentPairings() {
 
       toast.success(`Round ${currentRound} results submitted!`);
 
-      // Reload tournament data
-      loadTournament();
+      if (currentRound >= tournament.rounds) {
+        toast.success("Tournament Completed!");
+        navigate(`/tournament/${id}?tab=standings`);
+      } else {
+        // Reload tournament data
+        loadTournamentData();
 
-      // Clear pairings and move to next round
-      setPairings([]);
-      setResults({});
-      setCurrentRound((prev) => prev + 1);
+        // Clear pairings and move to next round
+        setPairings([]);
+        setResults({});
+        setCurrentRound((prev) => prev + 1);
+      }
     } catch (error) {
       toast.error(error.message || "Failed to submit results");
     }
@@ -129,7 +134,7 @@ export default function TournamentPairings() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="loader"></div>
       </div>
     );
   }

@@ -99,12 +99,7 @@ export default function RegistrationFormBuilder() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-muted-foreground">
-            Loading registration form builder...
-          </p>
-        </div>
+        <div className="loader"></div>
       </div>
     );
   }
@@ -315,11 +310,10 @@ export default function RegistrationFormBuilder() {
               {fields.map((field, index) => (
                 <div
                   key={index}
-                  className={`border rounded-lg p-4 bg-card transition-colors ${
-                    errors[index]
+                  className={`border rounded-lg p-4 bg-card transition-colors ${errors[index]
                       ? "border-destructive/50 bg-destructive/5"
                       : "border-muted hover:border-muted-foreground/30"
-                  }`}
+                    }`}
                 >
                   <div className="space-y-4">
                     {/* Field Editor Grid */}

@@ -13,8 +13,12 @@ from .database import engine, Base
 _BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=_BASE_DIR / ".env")
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables — wrapped so the server starts even if DB is temporarily unreachable
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as _db_err:
+    import warnings
+    warnings.warn(f"Could not connect to database at startup: {_db_err}", stacklevel=1)
 
 # Rate limiter — keyed by client IP (defined in core/limiter.py to avoid circular imports)
 

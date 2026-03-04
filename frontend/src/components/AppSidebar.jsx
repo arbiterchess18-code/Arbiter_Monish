@@ -16,7 +16,6 @@ const orbiterConductingLinks = [
   { title: "Conducting Dashboard", url: "/orbiter", icon: LayoutDashboard },
   { title: "Create Tournament", url: "/orbiter/create", icon: PlusCircle },
   { title: "Manage Tournaments", url: "/orbiter/manage", icon: Settings },
-  { title: "Results Entry", url: "/orbiter/results", icon: ClipboardList },
   { title: "Leaderboards", url: "/orbiter/leaderboards", icon: Trophy },
   { title: "Statistics", url: "/orbiter/stats", icon: BarChart3 },
   { title: "Organizer Requests", url: "/orbiter/requests", icon: Users },

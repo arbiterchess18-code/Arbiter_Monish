@@ -97,8 +97,8 @@ export function NotificationBell() {
                         {/* List */}
                         <div className="max-h-96 overflow-y-auto divide-y divide-border">
                             {loading ? (
-                                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                                    Loading…
+                                <div className="flex items-center justify-center py-10">
+                                    <div className="loader"></div>
                                 </div>
                             ) : notifications.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">

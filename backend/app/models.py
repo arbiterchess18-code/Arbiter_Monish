@@ -38,6 +38,7 @@ class User(Base):
     fide_id = Column(String(20), unique=True)
     fide_rating = Column(Integer, default=0)
     national_rating = Column(Integer, default=0)
+    country = Column(String(100), default="India")
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(
@@ -68,7 +69,7 @@ class Tournament(Base):
     venue_name = Column(String(255))
     city = Column(String(100))
     state = Column(String(100))
-    country = Column(String(100))
+    country = Column(String(100), default="India")
     google_maps_link = Column(Text)
 
     contact_person = Column(String(255))
