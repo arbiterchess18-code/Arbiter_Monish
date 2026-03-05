@@ -327,7 +327,27 @@ export default function TournamentPairings() {
                   <div className="text-lg font-semibold mb-2">
                     Ready to Generate Round {currentRound}
                   </div>
-                  <div>Click the button above to create pairings</div>
+                  <div className="text-sm text-muted-foreground mb-6">
+                    Generate Swiss pairings for this round to get started.
+                  </div>
+                  <Button
+                    onClick={handleGeneratePairings}
+                    disabled={generating}
+                    size="lg"
+                    className="bg-chess-gold hover:bg-chess-gold/90 text-black font-bold shadow-md border-none"
+                  >
+                    {generating ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin border-2 border-black border-t-transparent rounded-full mr-2" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Generate Round {currentRound} Pairings
+                      </>
+                    )}
+                  </Button>
                 </>
               )}
             </div>
