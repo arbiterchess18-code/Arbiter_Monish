@@ -29,7 +29,11 @@ export function AppLayout({ children }) {
             </SidebarTrigger>
             <div className="flex items-center gap-4 ml-auto">
               <div className="text-xs text-muted-foreground capitalize px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                {role === "arbiter" ? "Arbiter Mode" : "Player Mode"}
+                {role === "arbiter"
+                  ? "Arbiter Mode"
+                  : role === "organization"
+                    ? "Organization Mode"
+                    : "Player Mode"}
               </div>
               <ThemeToggle />
               <NotificationBell />

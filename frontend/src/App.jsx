@@ -30,6 +30,8 @@ import TournamentPairings from "./pages/TournamentPairings";
 import TournamentSummary from "./pages/TournamentSummary";
 import RegistrationFormBuilder from "./pages/RegistrationFormBuilder";
 import TournamentViewDetails from "./pages/TournamentViewDetails";
+import ArbitersPage from "./pages/ArbitersPage";
+import ArbiterDetailPage from "./pages/ArbiterDetailPage";
 import NotFound from "./pages/NotFound";
 import { useRole } from "@/lib/role-context";
 import { Navigate } from "react-router-dom";
@@ -41,6 +43,10 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const token = sessionStorage.getItem("authToken");
 
   if (!token) return <Navigate to="/login" replace />;
+
+  // Allow organizations to access arbiter routes
+  if (allowedRole === "arbiter" && role === "organization") return children;
+
   if (allowedRole && role !== allowedRole)
     return <Navigate to="/login" replace />;
 
@@ -52,7 +58,8 @@ const HomeRedirect = () => {
   const token = sessionStorage.getItem("authToken");
 
   if (!token) return <Navigate to="/login" replace />;
-  if (role === "arbiter") return <Navigate to="/arbiter-userhome" replace />;
+  if (role === "arbiter" || role === "organization")
+    return <Navigate to="/arbiter-userhome" replace />;
   if (role === "player") return <Navigate to="/player-userhome" replace />;
 
   return <Navigate to="/login" replace />;
@@ -120,6 +127,11 @@ const App = () => (
                       <Route
                         path="/leaderboard"
                         element={<LeaderboardPage />}
+                      />
+                      <Route path="/arbiters" element={<ArbitersPage />} />
+                      <Route
+                        path="/arbiters/:id"
+                        element={<ArbiterDetailPage />}
                       />
                       <Route
                         path="/achievements"

@@ -5,6 +5,7 @@ import datetime
 from sqlalchemy.sql import func
 import json
 
+
 class Role(Base):
     __tablename__ = "roles"
     role_id = Column(Integer, primary_key=True, index=True)
@@ -40,12 +41,24 @@ class User(Base):
     national_rating = Column(Integer, default=0)
     country = Column(String(100), default="India")
     is_active = Column(Boolean, default=True)
-    
+
     # External Rating Fields
     lichess_username = Column(String(50), nullable=True)
     lichess_rating = Column(Integer, nullable=True)
     chesstools_rating = Column(Integer, nullable=True)
     last_rating_sync = Column(TIMESTAMP, nullable=True)
+
+    # Arbiter-specific fields
+    title = Column(String(100), nullable=True)  # e.g., "International Arbiter"
+    location = Column(String(255), nullable=True)  # e.g., "Madrid, Spain"
+    phone = Column(String(20), nullable=True)
+    bio = Column(Text, nullable=True)
+    experience_years = Column(String(50), nullable=True)  # e.g., "18+ years"
+    # e.g., ["Team Events", "Grand Master Series"]
+    specializations = Column(JSON, default=list)
+    is_verified = Column(Boolean, default=False)
+    tournaments_conducted = Column(Integer, default=0)
+    availability = Column(String(255), default="Year-round")
 
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(
@@ -101,7 +114,8 @@ class Tournament(Base):
     fide_id = Column(String(50))
     aicf_id = Column(String(50))
     is_private = Column(Boolean, default=False)
-    tie_break_config_json = Column("tie_break_config", Text, default='["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]')
+    tie_break_config_json = Column(
+        "tie_break_config", Text, default='["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]')
 
     @property
     def tie_break_config(self):
@@ -140,7 +154,7 @@ class Round(Base):
     start_time = Column(TIMESTAMP)
 
     is_submitted = Column(Boolean, default=False)
-    
+
     tournament = relationship("Tournament", back_populates="rounds_list")
     matches = relationship("Match", back_populates="round",
                            cascade="all, delete-orphan")
@@ -216,9 +230,12 @@ class RatingHistory(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     notification_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
-    tournament_id = Column(Integer, ForeignKey("tournaments.tournament_id", ondelete="CASCADE"), nullable=True)
-    type = Column(String(50), nullable=False)   # e.g. RESULT_UPDATE, ROUND_PAIRING
+    user_id = Column(Integer, ForeignKey(
+        "users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"), nullable=True)
+    # e.g. RESULT_UPDATE, ROUND_PAIRING
+    type = Column(String(50), nullable=False)
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP, server_default=func.now(), index=True)

@@ -1,15 +1,32 @@
 import {
-  LayoutDashboard, Trophy, PlusCircle, Settings, Users, BarChart3,
-  ClipboardList, User, Swords, Award, Search, Crown, Gamepad2, LogOut
+  LayoutDashboard,
+  Trophy,
+  PlusCircle,
+  Settings,
+  Users,
+  BarChart3,
+  ClipboardList,
+  User,
+  Swords,
+  Award,
+  Search,
+  Crown,
+  Gamepad2,
+  LogOut,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
-  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { useRole } from "@/lib/role-context";
-
 
 const orbiterConductingLinks = [
   { title: "Arbiter Home", url: "/arbiter-userhome", icon: LayoutDashboard },
@@ -17,6 +34,20 @@ const orbiterConductingLinks = [
   { title: "Create Tournament", url: "/orbiter/create", icon: PlusCircle },
   { title: "Manage Tournaments", url: "/orbiter/manage", icon: Settings },
   { title: "Leaderboards", url: "/orbiter/leaderboards", icon: Trophy },
+  { title: "Statistics", url: "/orbiter/stats", icon: BarChart3 },
+  { title: "Organizer Requests", url: "/orbiter/requests", icon: Users },
+];
+
+const organizationConductingLinks = [
+  {
+    title: "Organization Home",
+    url: "/arbiter-userhome",
+    icon: LayoutDashboard,
+  },
+  { title: "Conducting Dashboard", url: "/orbiter", icon: LayoutDashboard },
+  { title: "Create Tournament", url: "/orbiter/create", icon: PlusCircle },
+  { title: "Manage Tournaments", url: "/orbiter/manage", icon: Settings },
+  { title: "Arbiters", url: "/arbiters", icon: Crown },
   { title: "Statistics", url: "/orbiter/stats", icon: BarChart3 },
   { title: "Organizer Requests", url: "/orbiter/requests", icon: Users },
 ];
@@ -57,13 +88,15 @@ export function AppSidebar() {
           </div>
           <div>
             <h2 className="font-display font-bold text-base">ChessMgr</h2>
-            <p className="text-[11px] text-muted-foreground capitalize">{role} Panel</p>
+            <p className="text-[11px] text-muted-foreground capitalize">
+              {role} Panel
+            </p>
           </div>
         </div>
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-3">
-        {role === "arbiter" ? (
+        {role === "arbiter" || role === "organization" ? (
           <>
             <SidebarGroup>
               <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground px-3 mb-1">
@@ -71,7 +104,10 @@ export function AppSidebar() {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {orbiterConductingLinks.map((item) => (
+                  {(role === "organization"
+                    ? organizationConductingLinks
+                    : orbiterConductingLinks
+                  ).map((item) => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
@@ -90,29 +126,31 @@ export function AppSidebar() {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground px-3 mb-1 mt-2">
-                Playing
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {orbiterPlayingLinks.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <NavLink
-                          to={item.url}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-                          activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
-                        >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          <span>{item.title}</span>
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            {role === "arbiter" && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground px-3 mb-1 mt-2">
+                  Playing
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {orbiterPlayingLinks.map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild>
+                          <NavLink
+                            to={item.url}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                            activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                          >
+                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span>{item.title}</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </>
         ) : (
           <SidebarGroup>

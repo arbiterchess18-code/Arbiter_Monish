@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -13,6 +13,7 @@ from ....schemas.user import UserCreate
 from ....core.limiter import limiter
 
 router = APIRouter()
+
 
 @router.post("/token", response_model=Token)
 @limiter.limit("5/minute")
@@ -28,7 +29,9 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
 
     roles = [ur.role.role_name.upper() for ur in user.user_roles]
     primary_role = "player"
-    if "SUPER_ADMIN" in roles or "ADMIN" in roles or "ARBITER" in roles:
+    if "ORGANIZATION" in roles:
+        primary_role = "organization"
+    elif "SUPER_ADMIN" in roles or "ADMIN" in roles or "ARBITER" in roles:
         primary_role = "arbiter"
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -49,15 +52,17 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         }
     }
 
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(
     user_in: UserCreate,
+    role: Optional[str] = Query(default=None),
     db: Session = Depends(get_db)
 ):
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(
             status_code=400, detail="Username already registered")
-    
+
     if db.query(models.User).filter(models.User.email == user_in.email).first():
         raise HTTPException(
             status_code=400, detail="Email already registered")
@@ -75,16 +80,25 @@ async def signup(
     db.commit()
     db.refresh(new_user)
 
+    requested_role = (role or user_in.role or "player").upper()
     role_name = "PLAYER"
-    if user_in.role and user_in.role.upper() == "ARBITER":
+    if requested_role == "ARBITER":
         role_name = "ARBITER"
+    elif requested_role == "ORGANIZATION":
+        role_name = "ORGANIZATION"
 
     from sqlalchemy import func
     target_role = db.query(models.Role).filter(
         func.upper(models.Role.role_name) == role_name).first()
-    if target_role:
-        db.add(models.UserRole(user_id=new_user.user_id,
-               role_id=target_role.role_id))
+    if not target_role:
+        target_role = models.Role(
+            role_name=role_name, description=f"{role_name} role")
+        db.add(target_role)
         db.commit()
+        db.refresh(target_role)
+
+    db.add(models.UserRole(user_id=new_user.user_id,
+           role_id=target_role.role_id))
+    db.commit()
 
     return {"message": "User created successfully"}

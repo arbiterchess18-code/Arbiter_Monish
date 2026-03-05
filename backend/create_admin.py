@@ -3,15 +3,18 @@ from app.models import User, Role, UserRole
 import bcrypt
 import datetime
 
+
 def get_password_hash(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
 
 def create_super_admin():
     db = SessionLocal()
 
-    roles = ["SUPER_ADMIN", "ADMIN", "ARBITER", "PLAYER"]
+    roles = ["SUPER_ADMIN", "ADMIN", "ARBITER", "ORGANIZATION", "PLAYER"]
     for role_name in roles:
-        existing_role = db.query(Role).filter(Role.role_name == role_name).first()
+        existing_role = db.query(Role).filter(
+            Role.role_name == role_name).first()
         if not existing_role:
             db.add(Role(role_name=role_name))
     db.commit()
@@ -34,7 +37,8 @@ def create_super_admin():
         db.refresh(new_admin)
 
         # 3. Assign SUPER_ADMIN Role
-        super_role = db.query(Role).filter(Role.role_name == "SUPER_ADMIN").first()
+        super_role = db.query(Role).filter(
+            Role.role_name == "SUPER_ADMIN").first()
         admin_role_link = UserRole(
             user_id=new_admin.user_id,
             role_id=super_role.role_id
@@ -44,6 +48,7 @@ def create_super_admin():
         print("Super Admin created successfully!")
 
     db.close()
+
 
 if __name__ == "__main__":
     create_super_admin()
