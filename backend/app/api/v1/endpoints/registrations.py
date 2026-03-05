@@ -129,15 +129,22 @@ async def get_tournament_registrations(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
-        raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can view registrations")
+    is_privileged = is_tournament_creator_or_admin(tournament, current_user)
 
-    registrations = db.query(models.TournamentRegistration).options(
+    # Arbiters/admins see all registrations (including pending)
+    # Regular players only see approved/active registrations
+    query = db.query(models.TournamentRegistration).options(
         joinedload(models.TournamentRegistration.user)
     ).filter(
         models.TournamentRegistration.tournament_id == tournament_id
-    ).order_by(models.TournamentRegistration.registration_date.desc()).all()
+    )
+
+    if not is_privileged:
+        query = query.filter(
+            models.TournamentRegistration.status.in_(["approved", "active"])
+        )
+
+    registrations = query.order_by(models.TournamentRegistration.registration_date.desc()).all()
 
     response = []
     for registration in registrations:
@@ -174,6 +181,13 @@ async def update_registration_status(
     if not is_tournament_creator_or_admin(tournament, current_user):
         raise HTTPException(
             status_code=403, detail="Only tournament creator or admin can manage registrations")
+
+    # Rule 3: Can only accept registrations after tournament has started
+    if status_update.status == "approved" and tournament.status != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Registrations can only be approved after the tournament has started"
+        )
 
     registration = db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id,

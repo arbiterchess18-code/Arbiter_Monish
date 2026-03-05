@@ -167,74 +167,87 @@ export default function ManageTournaments() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-          {tournaments.map((t, i) => (
-            <div
-              key={t.id}
-              className="relative flex flex-col h-full bg-card border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex-1">
-                <TournamentCard tournament={t} index={i} hideActions={true} />
+          {tournaments.map((t, i) => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const startDate = new Date(t.date);
+            startDate.setHours(0, 0, 0, 0);
+            const cannotUnpublish = t.status === "published" && today >= startDate;
+            const cannotDelete = t.status === "active";
+
+            return (
+              <div
+                key={t.id}
+                className="relative flex flex-col h-full bg-card border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex-1">
+                  <TournamentCard tournament={t} index={i} hideActions={true} />
+                </div>
+
+                {/* Quick Actions Footer */}
+                <div className="bg-muted/30 border-t p-3 grid grid-cols-4 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs font-medium"
+                    onClick={() => navigate(`/tournament/${t.id}`)}
+                    title="View tournament details"
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" /> View Details
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs font-medium"
+                    onClick={() => navigate(`/orbiter/create?edit=${t.id}`)}
+                    title="Edit tournament"
+                  >
+                    <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                  </Button>
+
+                  <Button
+                    variant={t.status === "published" ? "default" : "outline"}
+                    size="sm"
+                    className={`w-full text-xs font-medium ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                    onClick={() => togglePublish(t)}
+                    disabled={cannotUnpublish}
+                    title={
+                      cannotUnpublish
+                        ? "Cannot unpublish once the start date has arrived"
+                        : t.status === "published"
+                          ? "Unpublish tournament"
+                          : "Publish tournament"
+                    }
+                  >
+                    {t.status === "published" ? (
+                      <>
+                        <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-3.5 w-3.5 mr-1" /> Publish
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={() => {
+                      setActionTournament(t.id);
+                      setActionType("delete");
+                    }}
+                    disabled={cannotDelete}
+                    title={cannotDelete ? "Cannot delete an ongoing tournament" : "Delete tournament"}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                  </Button>
+                </div>
               </div>
-
-              {/* Quick Actions Footer */}
-              <div className="bg-muted/30 border-t p-3 grid grid-cols-4 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs font-medium"
-                  onClick={() => navigate(`/tournament/${t.id}`)}
-                  title="View tournament details"
-                >
-                  <Eye className="h-3.5 w-3.5 mr-1" /> View Details
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs font-medium"
-                  onClick={() => navigate(`/orbiter/create?edit=${t.id}`)}
-                  title="Edit tournament"
-                >
-                  <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
-                </Button>
-
-                <Button
-                  variant={t.status === "published" ? "default" : "outline"}
-                  size="sm"
-                  className={`w-full text-xs font-medium ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
-                  onClick={() => togglePublish(t)}
-                  title={
-                    t.status === "published"
-                      ? "Unpublish tournament"
-                      : "Publish tournament"
-                  }
-                >
-                  {t.status === "published" ? (
-                    <>
-                      <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="h-3.5 w-3.5 mr-1" /> Publish
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10"
-                  onClick={() => {
-                    setActionTournament(t.id);
-                    setActionType("delete");
-                  }}
-                  title="Delete tournament"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

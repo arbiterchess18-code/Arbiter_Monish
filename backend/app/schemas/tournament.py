@@ -30,6 +30,7 @@ class TournamentBase(BaseModel):
     fide_id: Optional[str] = None
     aicf_id: Optional[str] = None
     is_private: bool = False
+    tie_break_config: List[str] = ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]
 
     @field_validator("tournament_name", "venue_name", "organizer_name", "contact_person", mode="before")
     @classmethod
@@ -148,6 +149,9 @@ class TournamentCreate(TournamentBase):
             raise ValueError(
                 "At least one rating ID (FIDE or AICF) is required for rated tournaments")
 
+        if not self.tie_break_config or len(set(self.tie_break_config)) < 5:
+            raise ValueError("Select at least 5 unique tie-break rules in priority order")
+
         return self
 
 class TournamentUpdate(BaseModel):
@@ -179,6 +183,7 @@ class TournamentUpdate(BaseModel):
     aicf_id: Optional[str] = None
     is_private: Optional[bool] = None
     status: Optional[str] = None
+    tie_break_config: Optional[List[str]] = None
 
 class TournamentResponse(TournamentBase):
     tournament_id: int

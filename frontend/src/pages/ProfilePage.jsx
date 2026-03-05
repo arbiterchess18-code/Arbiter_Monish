@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRole } from "@/lib/role-context";
 import { PageHeader } from "@/components/PageHeader";
@@ -27,6 +27,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { mockRatingHistory, mockArbiterVacancies } from "@/lib/mock-data";
+import { getUserProfile, updateUserProfile } from "@/lib/tournament-service";
 
 // ── Arbiter titles that unlock the Verified Arbiter badge
 const ARBITER_TITLES = ["IA", "FA", "NA"];
@@ -91,24 +92,10 @@ export default function ProfilePage() {
   const fileInputRef = useRef(null);
 
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // ── Load from localStorage on mount (persists across refreshes)
-  const [profile, setProfile] = useState(() => {
-    try {
-      const saved = localStorage.getItem("userProfile");
-      return saved ? JSON.parse(saved) : mockProfile;
-    } catch {
-      return mockProfile;
-    }
-  });
-  const [draftProfile, setDraftProfile] = useState(() => {
-    try {
-      const saved = localStorage.getItem("userProfile");
-      return saved ? JSON.parse(saved) : mockProfile;
-    } catch {
-      return mockProfile;
-    }
-  });
+  const [profile, setProfile] = useState(mockProfile);
+  const [draftProfile, setDraftProfile] = useState(mockProfile);
   const [notifPrefs, setNotifPrefs] = useState(() => {
     try {
       const saved = localStorage.getItem("notifPrefs");
@@ -121,16 +108,66 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile");
   const [previewUrl, setPreviewUrl] = useState(null);
 
+  // Load real user profile from the backend
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const data = await getUserProfile();
+        if (data) {
+          const mapped = {
+            ...mockProfile,
+            name: data.name || `${data.first_name} ${data.last_name}`.trim(),
+            first_name: data.first_name || "",
+            last_name: data.last_name || "",
+            fide_id: data.fide_id || "",
+            rating: data.fide_rating || 0,
+            national_rating: data.national_rating || 0,
+            country: data.country || "India",
+            updated_at: data.updated_at,
+          };
+          setProfile(mapped);
+          setDraftProfile(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load user profile:", err);
+      }
+    };
+    loadProfile();
+  }, []);
+
   const isArbiter = ARBITER_TITLES.includes(profile.chess_title);
 
-  const handleSave = () => {
-    const saved = { ...draftProfile, updated_at: new Date().toISOString() };
-    setProfile(saved);
-    // Persist across refreshes until backend user_profiles API is wired up
-    localStorage.setItem("userProfile", JSON.stringify(saved));
-    setEditing(false);
-    toast.success("Profile saved successfully!");
-    // TODO: call PATCH /api/users/profile
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const result = await updateUserProfile({
+        first_name: draftProfile.first_name || draftProfile.name?.split(" ")[0] || "",
+        last_name: draftProfile.last_name || draftProfile.name?.split(" ").slice(1).join(" ") || "",
+        fide_id: draftProfile.fide_id || null,
+        fide_rating: parseInt(draftProfile.rating) || 0,
+        national_rating: parseInt(draftProfile.national_rating) || 0,
+        country: draftProfile.country,
+      });
+      // Merge the API response back into profile
+      const updated = {
+        ...draftProfile,
+        name: result.name,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        fide_id: result.fide_id,
+        rating: result.fide_rating,
+        national_rating: result.national_rating,
+        updated_at: result.updated_at,
+      };
+      setProfile(updated);
+      setDraftProfile(updated);
+      setEditing(false);
+      toast.success("Profile saved successfully!");
+    } catch (err) {
+      toast.error(err.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -178,11 +215,16 @@ export default function ProfilePage() {
           <div className="flex gap-2">
             {editing ? (
               <>
-                <Button variant="outline" size="sm" onClick={handleCancel}>
+                <Button variant="outline" size="sm" onClick={handleCancel} disabled={saving}>
                   <X className="h-4 w-4 mr-1.5" /> Cancel
                 </Button>
-                <Button size="sm" onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-1.5" /> Save Changes
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? (
+                    <div className="h-4 w-4 animate-spin border-2 border-primary-foreground border-t-transparent rounded-full mr-1.5" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1.5" />
+                  )}
+                  {saving ? "Saving..." : "Save Changes"}
                 </Button>
               </>
             ) : (
@@ -298,27 +340,31 @@ export default function ProfilePage() {
                   <h3 className="text-sm font-semibold">Edit Details</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <Label>First Name</Label>
+                      <Input className="mt-1.5" value={draftProfile.first_name || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, first_name: e.target.value }))} placeholder="First name" />
+                    </div>
+                    <div>
+                      <Label>Last Name</Label>
+                      <Input className="mt-1.5" value={draftProfile.last_name || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, last_name: e.target.value }))} placeholder="Last name" />
+                    </div>
+                    <div>
                       <Label>FIDE ID</Label>
-                      <Input className="mt-1.5" value={draftProfile.fide_id} onChange={(e) => setDraftProfile((p) => ({ ...p, fide_id: e.target.value }))} />
+                      <Input className="mt-1.5" value={draftProfile.fide_id} onChange={(e) => setDraftProfile((p) => ({ ...p, fide_id: e.target.value }))} placeholder="e.g. 1234567" />
                     </div>
                     <div>
-                      <Label>ACF ID</Label>
-                      <Input className="mt-1.5" value={draftProfile.acf_id} onChange={(e) => setDraftProfile((p) => ({ ...p, acf_id: e.target.value }))} />
+                      <Label>FIDE Rating</Label>
+                      <Input className="mt-1.5" type="number" value={draftProfile.rating || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, rating: parseInt(e.target.value) || 0 }))} placeholder="e.g. 1800" />
                     </div>
                     <div>
-                      <Label>Chess Title</Label>
-                      <Select value={draftProfile.chess_title} onValueChange={(v) => setDraftProfile((p) => ({ ...p, chess_title: v }))}>
-                        <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {TITLE_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Label>National Rating</Label>
+                      <Input className="mt-1.5" type="number" value={draftProfile.national_rating || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, national_rating: parseInt(e.target.value) || 0 }))} placeholder="e.g. 1750" />
                     </div>
                     <div>
                       <Label>Country</Label>
-                      <Input className="mt-1.5" value={draftProfile.country} onChange={(e) => setDraftProfile((p) => ({ ...p, country: e.target.value }))} />
+                      <Input className="mt-1.5" value={draftProfile.country} onChange={(e) => setDraftProfile((p) => ({ ...p, country: e.target.value }))} placeholder="e.g. India" />
                     </div>
                   </div>
+
 
                   <div>
                     <Label>Playing Preferences</Label>

@@ -81,7 +81,13 @@ export default function CreateTournament() {
     isOrganizerVerified: false,
     hasPrizes: false,
     prizeCategories: [],
-    tieBreakers: ["Buchholz"],
+    tie_break_config: [
+      "Buchholz Cut-1",
+      "Buchholz",
+      "Sonneborn-Berger",
+      "Direct Encounter",
+      "Number of Wins",
+    ],
     customFields: [],
     detailsPdfName: "",
     detailsPdfSize: 0,
@@ -147,7 +153,13 @@ export default function CreateTournament() {
         { category: "Open Second", amount: "25000" },
         { category: "Best Junior", amount: "5000" },
       ],
-      tieBreakers: ["Buchholz", "Sonneborn-Berger"],
+      tie_break_config: [
+        "Buchholz Cut-1",
+        "Buchholz",
+        "Sonneborn-Berger",
+        "Direct Encounter",
+        "Number of Wins",
+      ],
     };
 
     setTournamentData(demoData);
@@ -375,12 +387,29 @@ export default function CreateTournament() {
 
   const toggleTieBreaker = (method) => {
     setTournamentData((prev) => {
-      const current = prev.tieBreakers;
+      const current = prev.tie_break_config || [];
       if (current.includes(method)) {
-        return { ...prev, tieBreakers: current.filter((m) => m !== method) };
+        return {
+          ...prev,
+          tie_break_config: current.filter((m) => m !== method),
+        };
       } else {
-        return { ...prev, tieBreakers: [...current, method] };
+        return { ...prev, tie_break_config: [...current, method] };
       }
+    });
+  };
+
+  const moveTieBreaker = (index, direction) => {
+    setTournamentData((prev) => {
+      const current = [...(prev.tie_break_config || [])];
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= current.length) return prev;
+
+      const temp = current[index];
+      current[index] = current[newIndex];
+      current[newIndex] = temp;
+
+      return { ...prev, tie_break_config: current };
     });
   };
 
@@ -518,12 +547,12 @@ export default function CreateTournament() {
       }
 
       // Validate tie-breakers for Swiss system
-      if (
-        tournamentData.pairingSystem === "Swiss" &&
-        tournamentData.tieBreakers.length === 0
-      ) {
-        newErrors.tieBreakers = "Select at least one tie breaker for Swiss";
-        isValid = false;
+      if (tournamentData.pairingSystem === "Swiss") {
+        const tbs = tournamentData.tie_break_config || [];
+        if (tbs.length < 5) {
+          newErrors.tieBreakers = "Select at least 5 tie breakers in priority order";
+          isValid = false;
+        }
       }
     } else if (step === 3) {
       // Step 3: Validate payment and rating fields if applicable
@@ -1303,59 +1332,113 @@ export default function CreateTournament() {
           {/* Tie Breaker Rules */}
           {tournamentData.pairingSystem === "Swiss" && (
             <Card className="stat-card">
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex items-center gap-2 text-primary font-semibold mb-4">
-                  <Settings className="w-5 h-5" /> Tie Breaker Rules
+              <CardContent className="pt-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-primary font-semibold">
+                    <Settings className="w-5 h-5" /> Tie Breaker Rules
+                  </div>
+                  {tournamentData.tie_break_config?.length >= 5 ? (
+                    <Badge variant="success" className="bg-green-100 text-green-700 hover:bg-green-100">
+                      Minimum 5 reach
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">
+                      Select {5 - (tournamentData.tie_break_config?.length || 0)} more
+                    </Badge>
+                  )}
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Select tie breaker methods in order of priority
-                </p>
 
-                <div className="space-y-3">
-                  {[
-                    {
-                      id: "buchholz",
-                      value: "Buchholz",
-                      label: "Buchholz",
-                      desc: "Sum of opponents' scores",
-                    },
-                    {
-                      id: "sonneborn",
-                      value: "Sonneborn-Berger",
-                      label: "Sonneborn-Berger",
-                      desc: "Weighted opponents' scores",
-                    },
-                    {
-                      id: "blackWins",
-                      value: "Number of Wins with Black Pieces",
-                      label: "Number of Wins with Black Pieces",
-                      desc: "Counts victories as Black",
-                    },
-                  ].map((breaker) => (
-                    <div
-                      key={breaker.id}
-                      className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50"
-                    >
-                      <Checkbox
-                        id={breaker.id}
-                        checked={tournamentData.tieBreakers.includes(
-                          breaker.value,
-                        )}
-                        onCheckedChange={() => toggleTieBreaker(breaker.value)}
-                      />
-                      <div className="flex-1">
-                        <Label
-                          htmlFor={breaker.id}
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          {breaker.label}
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          {breaker.desc}
-                        </p>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Available Rules */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Available Methods</Label>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                      {[
+                        "Buchholz",
+                        "Buchholz Cut-1",
+                        "Buchholz Cut-2",
+                        "Sonneborn-Berger",
+                        "Direct Encounter",
+                        "Number of Wins",
+                        "Progressive Score",
+                        "Number of Games with Black",
+                        "Average Rating of Opponents (ARO)",
+                      ].map((method) => {
+                        const isSelected = tournamentData.tie_break_config?.includes(method);
+                        return (
+                          <div
+                            key={method}
+                            onClick={() => toggleTieBreaker(method)}
+                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${isSelected
+                              ? "bg-primary/5 border-primary/40 opacity-50"
+                              : "hover:bg-muted/80 border-border"
+                              }`}
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{method}</span>
+                              <span className="text-[10px] text-muted-foreground">Click to {isSelected ? "remove" : "add"}</span>
+                            </div>
+                            {isSelected ? (
+                              <CheckCircle2 className="w-4 h-4 text-primary" />
+                            ) : (
+                              <Plus className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Selected Priority */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Priority Order (TB1, TB2...)</Label>
+                    <div className="space-y-2 border rounded-xl p-4 bg-muted/30 min-h-[100px]">
+                      {tournamentData.tie_break_config?.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground text-sm italic">
+                          No rules selected yet
+                        </div>
+                      )}
+                      {tournamentData.tie_break_config?.map((method, idx) => (
+                        <div
+                          key={method}
+                          className="flex items-center gap-3 p-3 bg-card border rounded-lg shadow-sm group animate-in slide-in-from-right-2 duration-200"
+                        >
+                          <div className="flex-none flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                            {idx + 1}
+                          </div>
+                          <span className="flex-1 text-sm font-medium truncate">{method}</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7"
+                              disabled={idx === 0}
+                              onClick={() => moveTieBreaker(idx, -1)}
+                            >
+                              <ChevronLeft className="w-3 h-3 rotate-90" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7"
+                              disabled={idx === (tournamentData.tie_break_config?.length - 1)}
+                              onClick={() => moveTieBreaker(idx, 1)}
+                            >
+                              <ChevronLeft className="w-3 h-3 -rotate-90" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => toggleTieBreaker(method)}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {errors.tieBreakers && (

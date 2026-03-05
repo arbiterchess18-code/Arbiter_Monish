@@ -44,6 +44,13 @@ def migrate():
         ADD COLUMN IF NOT EXISTS seed INT,
         ADD COLUMN IF NOT EXISTS color_history VARCHAR(255) DEFAULT '',
         ADD COLUMN IF NOT EXISTS bye_received BOOLEAN DEFAULT FALSE;
+        """,
+        """
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS lichess_username VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS lichess_rating INT,
+        ADD COLUMN IF NOT EXISTS chesstools_rating INT,
+        ADD COLUMN IF NOT EXISTS last_rating_sync TIMESTAMP;
         """
     ]
 

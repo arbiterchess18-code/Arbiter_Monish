@@ -1,4 +1,5 @@
 fastapi
+httpx
 uvicorn
 sqlalchemy
 pydantic
@@ -11,3 +12,4 @@ passlib[bcrypt]
 PyJWT
 email-validator
 slowapi
+resend==2.23.0

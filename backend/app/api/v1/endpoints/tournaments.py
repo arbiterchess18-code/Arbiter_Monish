@@ -38,11 +38,11 @@ async def create_tournament(
 
 @router.get("/public", response_model=List[TournamentResponse])
 async def get_public_tournaments(db: Session = Depends(get_db)):
-    """Players only see what is ready"""
+    """Players can see all non-private tournaments that are published, upcoming, or active"""
     tournaments = db.query(models.Tournament).filter(
         models.Tournament.is_private == False,
-        models.Tournament.status == "published"
-    ).all()
+        models.Tournament.status.in_(["published", "upcoming", "active"])
+    ).order_by(models.Tournament.start_date.asc()).all()
     for t in tournaments:
         t.registered_count = db.query(models.TournamentRegistration).filter(
             models.TournamentRegistration.tournament_id == t.tournament_id,
@@ -101,6 +101,39 @@ async def update_tournament(
         raise HTTPException(
             status_code=403, detail="You can only update your own tournaments")
 
+    from datetime import date
+    today = date.today()
+
+    # Rule 1: Cannot start tournament before scheduled date
+    if tournament_update.status == "active" and tournament.status != "active":
+        if tournament.start_date and today < tournament.start_date:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Tournament cannot be started before {tournament.start_date}"
+            )
+
+    # Rule 2: Cannot unpublish once tournament date has arrived
+    if tournament_update.status == "upcoming" and tournament.status == "published":
+        if tournament.start_date and today >= tournament.start_date:
+            raise HTTPException(
+                status_code=400,
+                detail="Tournament cannot be unpublished once the start date has arrived"
+            )
+
+    # Rule 6: Notifications on Start
+    if tournament_update.status == "active" and tournament.status != "active":
+        from ....services import notification_service, email_service
+        # Get all approved/active registrations to notify
+        player_ids = [reg.user_id for reg in tournament.registrations if reg.user_id and reg.status in ("approved", "active")]
+        if player_ids:
+            notification_service.notify_tournament_started(db, tournament=tournament, player_ids=player_ids)
+            email_service.send_tournament_started_email(db, tournament_id=tournament.tournament_id)
+
+    # Notifications on Completion
+    if tournament_update.status == "completed" and tournament.status != "completed":
+        from ....services import email_service
+        email_service.send_tournament_results_email(db, tournament_id=tournament.tournament_id)
+
     for key, value in tournament_update.model_dump(exclude_unset=True).items():
         setattr(tournament, key, value)
 
@@ -123,6 +156,13 @@ async def delete_tournament(
     if tournament.created_by != current_user.user_id and not has_privileged_role(current_user):
         raise HTTPException(
             status_code=403, detail="You can only delete your own tournaments")
+
+    # Rule 4: Cannot delete ongoing tournament
+    if tournament.status == "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Ongoing tournaments cannot be deleted"
+        )
 
     db.delete(tournament)
     db.commit()
@@ -177,157 +217,34 @@ async def get_tournament_view_details(
     }
 
 @router.get("/{tournament_id}/standings")
-async def get_standings(
-    tournament_id: int,
-    db: Session = Depends(get_db)
-):
-    import json
-    tournament = db.query(models.Tournament).filter(
-        models.Tournament.tournament_id == tournament_id).first()
+async def get_standings(tournament_id: int, db: Session = Depends(get_db)):
+    from ....logic.standings import calculate_standings
+    
+    tournament, standings_data = calculate_standings(db, tournament_id)
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    registrations = db.query(models.TournamentRegistration).options(
-        joinedload(models.TournamentRegistration.user)
-    ).filter(
-        models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
-    ).all()
+    # Get the top 3 tie-break names for display
+    tb_config = tournament.tie_break_config or ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Number of Wins", "Direct Encounter"]
+    top_tbs = [tb for tb in tb_config if tb != "Direct Encounter"][:3]
 
-    # Initialize points for all approved players
-    player_points = {reg.user_id: 0.0 for reg in registrations}
-    
-    player_data = {reg.user_id: {
-        "opponent_scores": [],
-        "sonneborn_berger": 0.0,
-        "seed": reg.seed or 0
-    } for reg in registrations}
-
-    # Fetch all completed matches for the tournament
-    matches = db.query(models.Match).filter(
-        models.Match.tournament_id == tournament_id,
-        models.Match.result.isnot(None)
-    ).all()
-
-    # Calculate points and tie-breaker components from matches
-    for match in matches:
-        w_id = match.white_player_id
-        b_id = match.black_player_id
-        res = match.result
-
-        if not w_id:
-            continue
-
-        # Map results to points
-        w_pts_inc = 0.0
-        b_pts_inc = 0.0
-        if res == "1-0":
-            w_pts_inc = 1.0
-        elif res == "0-1":
-            b_pts_inc = 1.0
-        elif res == "1/2-1/2":
-            w_pts_inc = 0.5
-            b_pts_inc = 0.5
-        elif res == "Bye": # Explicit Bye result
-            w_pts_inc = 1.0
-
-        # Update points
-        if w_id in player_points:
-            player_points[w_id] += w_pts_inc
-        if b_id and b_id in player_points:
-            player_points[b_id] += b_pts_inc
-
-        # Tie-breaker logic (only if both players are present)
-        if w_id in player_data and b_id and b_id in player_data:
-            # We will use the final points for Buchholz, so we just collect opponents for now
-            # Note: Standard Buchholz uses the opponent's FINAL score.
-            # We'll calculate Buchholz in a second pass after all points are summed.
-            player_data[w_id]["opponent_ids"] = player_data[w_id].get("opponent_ids", []) + [b_id]
-            player_data[b_id]["opponent_ids"] = player_data[b_id].get("opponent_ids", []) + [w_id]
-
-            # SB is based on opponent's current points relative to the result
-            # Actually, standard SB also uses FINAL points.
-            # But we can only calculate it accurately after we have all player_points.
-
-    # Second pass: Calculate Tie-breakers using the summed player_points
-    for match in matches:
-        w_id = match.white_player_id
-        b_id = match.black_player_id
-        res = match.result
+    final_standings = []
+    for p in standings_data:
+        row = {
+            "rank": p["rank"],
+            "user_id": p["user_id"],
+            "starting_no": p["starting_no"],
+            "player_name": p["player_name"],
+            "rating": p["rating"],
+            "points": p["points"],
+        }
+        # Add the 3 display columns
+        for i, label in enumerate(top_tbs, start=1):
+            row[f"tb{i}"] = p["tb_map"].get(label, 0.0)
         
-        if w_id in player_data and b_id and b_id in player_data:
-            w_pts = player_points[w_id]
-            b_pts = player_points[b_id]
-            
-            # Buchholz components
-            player_data[w_id]["opponent_scores"].append(player_points[b_id])
-            player_data[b_id]["opponent_scores"].append(player_points[w_id])
-            
-            # SB calculation
-            if res == "1-0":
-                player_data[w_id]["sonneborn_berger"] += player_points[b_id]
-            elif res == "0-1":
-                player_data[b_id]["sonneborn_berger"] += player_points[w_id]
-            elif res == "1/2-1/2":
-                player_data[w_id]["sonneborn_berger"] += (player_points[b_id] / 2.0)
-                player_data[b_id]["sonneborn_berger"] += (player_points[w_id] / 2.0)
-
-    standings = []
-    for registration in registrations:
-        player = registration.user
-        uid = registration.user_id
-        data = player_data[uid]
-        opp_scores = data["opponent_scores"]
-        
-        # Buchholz Total
-        bh_total = sum(opp_scores)
-        # Buchholz Cut 1 (Standard)
-        bh_cut1 = bh_total - min(opp_scores) if opp_scores else 0.0
-
-        # Try to extract extra info from registration payload
-        extra_info = {}
-        try:
-            if registration.color_history and registration.color_history.startswith("{"):
-                extra_info = json.loads(registration.color_history)
-        except:
-            pass
-
-        title = extra_info.get("title", "")
-        base_name = f"{player.first_name or ''} {player.last_name or ''}".strip() or player.username
-        full_name = f"{title} {base_name}".strip()
-
-        # Determine federation: extra_info -> player.country -> default "IND"
-        fed = extra_info.get("federation")
-        if not fed:
-            country = player.country or "India"
-            fed = "IND" if country.lower() == "india" else country[:3].upper()
-
-        standings.append({
-            "user_id": uid,
-            "starting_no": data["seed"],
-            "player_name": full_name,
-            "federation": fed,
-            "rating": player.fide_rating or player.national_rating or 0,
-            "points": player_points[uid],
-            "buchholz": bh_cut1,
-            "buchholz_total": bh_total,
-            "sonneborn_berger": data["sonneborn_berger"],
-        })
-
-    standings.sort(
-        key=lambda item: (
-            item["points"],
-            item["buchholz"],
-            item["buchholz_total"],
-            item["sonneborn_berger"],
-        ),
-        reverse=True,
-    )
-
-    for idx, item in enumerate(standings, start=1):
-        item["rank"] = idx
+        final_standings.append(row)
 
     return {
-        "tie_breaker_rules": ["Buchholz Cut 1", "Buchholz Total", "Sonneborn-Berger"],
-        "standings": standings,
+        "tie_break_names": top_tbs,
+        "standings": final_standings,
     }

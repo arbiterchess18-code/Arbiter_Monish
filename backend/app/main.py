@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from .core.limiter import limiter
-from .api.v1.endpoints import auth, tournaments, registrations, pairings, notifications
+from .api.v1.endpoints import auth, tournaments, registrations, pairings, notifications, leaderboard
 from .database import engine, Base
 
 # Load .env explicitly here so ALLOWED_ORIGINS is available before middleware setup
@@ -47,11 +47,14 @@ app.add_middleware(
 )
 
 # Include Routers
+from .api.v1.endpoints import users as users_router
 app.include_router(auth.router, tags=["Authentication"])
+app.include_router(users_router.router, prefix="/users", tags=["Users"])
 app.include_router(tournaments.router, prefix="/tournaments", tags=["Tournaments"])
 app.include_router(registrations.router, prefix="/tournaments", tags=["Registrations"])
 app.include_router(pairings.router, prefix="/tournaments", tags=["Pairings"])
 app.include_router(notifications.router)
+app.include_router(leaderboard.router, prefix="/api/v1/leaderboard", tags=["Leaderboard"])
 
 @app.get("/health")
 async def health_check():

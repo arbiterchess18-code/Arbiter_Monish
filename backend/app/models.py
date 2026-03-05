@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Date, TIMESTAMP, Numeric
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Date, TIMESTAMP, Numeric, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
@@ -40,6 +40,13 @@ class User(Base):
     national_rating = Column(Integer, default=0)
     country = Column(String(100), default="India")
     is_active = Column(Boolean, default=True)
+    
+    # External Rating Fields
+    lichess_username = Column(String(50), nullable=True)
+    lichess_rating = Column(Integer, nullable=True)
+    chesstools_rating = Column(Integer, nullable=True)
+    last_rating_sync = Column(TIMESTAMP, nullable=True)
+
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(
         TIMESTAMP, server_default=func.now(), onupdate=func.now())
@@ -94,6 +101,17 @@ class Tournament(Base):
     fide_id = Column(String(50))
     aicf_id = Column(String(50))
     is_private = Column(Boolean, default=False)
+    tie_break_config_json = Column("tie_break_config", Text, default='["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]')
+
+    @property
+    def tie_break_config(self):
+        if not self.tie_break_config_json:
+            return ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]
+        return json.loads(self.tie_break_config_json)
+
+    @tie_break_config.setter
+    def tie_break_config(self, value):
+        self.tie_break_config_json = json.dumps(value)
 
     # upcoming, active, completed
     status = Column(String(30), default="upcoming")
@@ -121,6 +139,8 @@ class Round(Base):
     round_number = Column(Integer, nullable=False)
     start_time = Column(TIMESTAMP)
 
+    is_submitted = Column(Boolean, default=False)
+    
     tournament = relationship("Tournament", back_populates="rounds_list")
     matches = relationship("Match", back_populates="round",
                            cascade="all, delete-orphan")

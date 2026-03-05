@@ -34,6 +34,45 @@ const handleResponse = async (response) => {
 };
 
 /**
+ * Get the current user's profile
+ */
+export const getUserProfile = async () => {
+  try {
+    const response = await fetch(`${API_URL}/users/me`, {
+      headers: getAuthHeaders(),
+    });
+    await handleResponse(response);
+    if (!response.ok) throw new Error("Failed to fetch user profile");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    return null;
+  }
+};
+
+/**
+ * Update the current user's profile
+ */
+export const updateUserProfile = async (profileData) => {
+  try {
+    const response = await fetch(`${API_URL}/users/me`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(profileData),
+    });
+    await handleResponse(response);
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to update profile");
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating user profile:", error);
+    throw error;
+  }
+};
+
+/**
  * Get all tournaments from Backend
  */
 export const getTournaments = async () => {
@@ -940,6 +979,29 @@ export const getTournamentPairings = async (tournamentId) => {
   return await response.json();
 };
 
+/**
+ * Finalize a round (marks as submitted)
+ */
+export const finalizeRound = async (tournamentId, roundNumber) => {
+  try {
+    const response = await fetch(
+      `${API_URL}/tournaments/${tournamentId}/round/${roundNumber}/finalize`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+      },
+    );
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to finalize round");
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error finalizing round:", error);
+    throw error;
+  }
+};
+
 export const startTournamentPairing = async (tournamentId) => {
   const response = await fetch(
     `${API_URL}/tournaments/${tournamentId}/pairings/start`,
@@ -1009,6 +1071,36 @@ export const updateMatchResult = async (tournamentId, matchId, result) => {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || "Failed to update match result");
+  }
+  return await response.json();
+};
+
+export const regenerateTournamentPairing = async (tournamentId) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/pairings/regenerate`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to regenerate pairings");
+  }
+  return await response.json();
+};
+
+export const finalizeTournamentRound = async (tournamentId, roundNumber) => {
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/rounds/${roundNumber}/finalize`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to finalize round");
   }
   return await response.json();
 };

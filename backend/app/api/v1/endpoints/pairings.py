@@ -135,17 +135,20 @@ async def get_tournament_pairings(
         "approved_participants": len(approved_registrations),
         "current_round": tournament.current_round or 0,
         "round_status": "not_started" if len(rounds) == 0 else "in_progress",
+        "rounds_info": [{ "round_number": r.round_number, "is_submitted": r.is_submitted } for r in rounds],
         "pairing_system": tournament.pairing_system,
-        "tie_breaker_rules": ["Buchholz", "Sonneborn-Berger", "Wins with Black"],
+        "tie_breaker_rules": tournament.tie_break_config or ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Number of Wins", "Direct Encounter"],
         "pairings": pairings,
     }
 
-@router.post("/{tournament_id}/pairings/start")
-async def start_pairing_round(
+@router.post("/{tournament_id}/rounds/{round_number}/finalize")
+async def finalize_round(
     tournament_id: int,
+    round_number: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    print(f"--- Finalizing Round {round_number} ---")
     tournament = db.query(models.Tournament).filter(
         models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
@@ -153,49 +156,40 @@ async def start_pairing_round(
 
     if not is_tournament_creator_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can start pairings")
+            status_code=403, detail="Only tournament creator or admin can finalize rounds")
 
-    approved_registrations = db.query(models.TournamentRegistration).filter(
-        models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
-    ).all()
+    round_item = db.query(models.Round).filter(
+        models.Round.tournament_id == tournament_id,
+        models.Round.round_number == round_number
+    ).first()
+    if not round_item:
+        raise HTTPException(status_code=404, detail="Round not found")
 
-    if len(approved_registrations) < 2:
-        print(f"❌ Cannot start pairings for tournament {tournament_id}: only {len(approved_registrations)} approved participants.")
+    # Check for incomplete matches
+    incomplete_matches = db.query(models.Match).filter(
+        models.Match.round_id == round_item.round_id,
+        models.Match.result == None
+    ).count()
+
+    if incomplete_matches > 0:
         raise HTTPException(
-            status_code=400, detail="At least 2 approved participants are required")
+            status_code=400,
+            detail=f"Cannot finalize Round {round_number}: {incomplete_matches} matches have no result entered."
+        )
 
-    next_round = (tournament.current_round or 0) + 1
-    if tournament.rounds and next_round > tournament.rounds:
-        print(f"❌ Cannot start pairings for tournament {tournament_id}: round {next_round} exceeds total rounds {tournament.rounds}.")
-        raise HTTPException(
-            status_code=400, detail="All configured rounds are already generated")
+    round_item.is_submitted = True
+    db.commit()
 
-    if tournament.current_round and tournament.current_round > 0:
-        prev_round = db.query(models.Round).filter(
-            models.Round.tournament_id == tournament_id,
-            models.Round.round_number == tournament.current_round
-        ).first()
-        if prev_round:
-            incomplete_matches = db.query(models.Match).filter(
-                models.Match.round_id == prev_round.round_id,
-                models.Match.result == None
-            ).count()
-            if incomplete_matches > 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot start Round {next_round}: {incomplete_matches} matches from Round {tournament.current_round} have no result entered."
-                )
+    return {"message": f"Round {round_number} finalized successfully", "is_submitted": True}
 
-    round_record = models.Round(
-        tournament_id=tournament_id,
-        round_number=next_round,
-    )
-    db.add(round_record)
-    db.flush()
 
+def _generate_pairings_for_round(db: Session, tournament: models.Tournament, round_record: models.Round, approved_registrations: list):
+    """
+    Core pairing logic extracted for reuse (Start and Regenerate).
+    """
     sorted_regs = approved_registrations
     pairing_system = (tournament.pairing_system or "Swiss").lower()
+    next_round = round_record.round_number
 
     if "knockout" in pairing_system:
         sorted_regs = sorted(
@@ -222,6 +216,7 @@ async def start_pairing_round(
         rotation = (next_round - 1) % max(len(sorted_regs), 1)
         sorted_regs = sorted_regs[rotation:] + sorted_regs[:rotation]
     else:
+        # Standard Swiss-ish sorting by points then ID
         sorted_regs = sorted(
             approved_registrations,
             key=lambda registration: (
@@ -236,20 +231,76 @@ async def start_pairing_round(
         black_reg = sorted_regs[index + 1] if index + 1 < len(sorted_regs) else None
 
         new_match = models.Match(
-            tournament_id=tournament_id,
+            tournament_id=tournament.tournament_id,
             round_id=round_record.round_id,
             white_player_id=white_reg.user_id,
             black_player_id=black_reg.user_id if black_reg else None,
             board_number=board_number,
-            result="1-0" if not black_reg else None,
+            result="1-0" if not black_reg else None, # BYE gives 1 point
         )
         db.add(new_match)
 
+        # Update cache points for BYE (Standings will recalculate anyway, but for immediate UI consistency)
         if not black_reg:
             white_reg.current_points = float(white_reg.current_points or 0) + 1.0
 
         board_number += 1
         index += 2
+
+@router.post("/{tournament_id}/pairings/start")
+async def start_pairing_round(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if not is_tournament_creator_or_admin(tournament, current_user):
+        raise HTTPException(
+            status_code=403, detail="Only tournament creator or admin can start pairings")
+
+    if (tournament.current_round or 0) == 0 and tournament.status != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Tournament must be officially started before generating Round 1 pairings"
+        )
+
+    approved_registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).all()
+
+    if len(approved_registrations) < 2:
+        raise HTTPException(
+            status_code=400, detail="At least 2 approved participants are required")
+
+    next_round = (tournament.current_round or 0) + 1
+    if tournament.rounds and next_round > tournament.rounds:
+        raise HTTPException(
+            status_code=400, detail="All configured rounds are already generated")
+
+    if tournament.current_round and tournament.current_round > 0:
+        prev_round = db.query(models.Round).filter(
+            models.Round.tournament_id == tournament_id,
+            models.Round.round_number == tournament.current_round
+        ).first()
+        if prev_round and not prev_round.is_submitted:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Round {tournament.current_round} must be finalized before starting Round {next_round}."
+            )
+
+    round_record = models.Round(
+        tournament_id=tournament_id,
+        round_number=next_round,
+    )
+    db.add(round_record)
+    db.flush()
+
+    _generate_pairings_for_round(db, tournament, round_record, approved_registrations)
 
     tournament.current_round = next_round
     if tournament.status == "upcoming":
@@ -257,19 +308,75 @@ async def start_pairing_round(
 
     db.commit()
 
-    # Notify all players that round pairings are ready
-    player_ids = [
-        reg.user_id for reg in approved_registrations if reg.user_id
-    ]
+    # Notify all players
+    player_ids = [reg.user_id for reg in approved_registrations if reg.user_id]
     notification_service.notify_round_pairing(
-        db,
-        tournament=tournament,
-        round_number=next_round,
-        player_ids=player_ids,
+        db, tournament=tournament, round_number=next_round, player_ids=player_ids
     )
     db.commit()
 
     return {"message": f"Round {next_round} pairings generated successfully"}
+
+@router.post("/{tournament_id}/pairings/regenerate")
+async def regenerate_pairing_round(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    print(f"--- Regenerating Pairings for Tournament {tournament_id} ---")
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if not is_tournament_creator_or_admin(tournament, current_user):
+        raise HTTPException(
+            status_code=403, detail="Only tournament creator or admin can regenerate pairings")
+
+    if not tournament.current_round or tournament.current_round == 0:
+        print(f"❌ Regenerate failed: current_round is {tournament.current_round}")
+        raise HTTPException(status_code=400, detail="No round exists to regenerate")
+
+    round_item = db.query(models.Round).filter(
+        models.Round.tournament_id == tournament_id,
+        models.Round.round_number == tournament.current_round
+    ).first()
+    
+    if not round_item:
+        print(f"❌ Regenerate failed: Round record for {tournament.current_round} not found in DB")
+        raise HTTPException(status_code=404, detail="Current round not found")
+        
+    if round_item.is_submitted:
+        print(f"❌ Regenerate failed: Round {tournament.current_round} is already submitted")
+        raise HTTPException(status_code=400, detail="Cannot regenerate pairings after round results are submitted")
+
+    # Delete existing matches for this round
+    db.query(models.Match).filter(models.Match.round_id == round_item.round_id).delete()
+    db.commit()
+    
+    # Refresh registrations to clear BYE points if they exist
+    # (Actually, points are best recalculated from scratch, but let's be safe)
+    from ...logic.standings import calculate_standings
+    _, standings_data = calculate_standings(db, tournament_id)
+    
+    # Sync current_points cache on registrations
+    reg_map = {reg.user_id: reg for reg in db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id).all()}
+    for entry in standings_data:
+        if entry["user_id"] in reg_map:
+            reg_map[entry["user_id"]].current_points = entry["points"]
+    
+    db.commit()
+
+    approved_registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).all()
+
+    _generate_pairings_for_round(db, tournament, round_item, approved_registrations)
+    db.commit()
+
+    return {"message": f"Round {tournament.current_round} pairings regenerated successfully"}
 
 @router.post("/{tournament_id}/seed-players")
 async def seed_players(

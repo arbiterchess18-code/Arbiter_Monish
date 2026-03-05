@@ -31,6 +31,7 @@ import {
   UserPlus,
   Play,
   Flag,
+  Printer,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -44,8 +45,11 @@ import {
   manualRegisterPlayer,
   getTournamentPairings,
   startTournamentPairing,
+  finalizeTournamentRound,
   updateMatchResult,
   seedTournamentPlayers,
+  completeTournament,
+  regenerateTournamentPairing,
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
@@ -76,6 +80,8 @@ export default function TournamentDetails() {
   const [generatingPairings, setGeneratingPairings] = useState(false);
   const [standingsSort, setStandingsSort] = useState("points");
   const [selectedRound, setSelectedRound] = useState(1);
+  const [tieBreakNames, setTieBreakNames] = useState([]);
+  const [roundsInfo, setRoundsInfo] = useState([]);
 
   useEffect(() => {
     loadTournament();
@@ -102,6 +108,14 @@ export default function TournamentDetails() {
         ...data,
         id: data.tournament_id,
         name: data.tournament_name,
+        startDate: data.start_date,
+        endDate: data.end_date,
+        startTime: data.start_time,
+        venue: data.venue_name,
+        city: data.city,
+        type: data.event_type,
+        rated: data.is_rated,
+        increment: data.increment,
         // Ensure registeredPlayers is always an array
         registeredPlayers: data.registeredPlayers || [],
         timeControl: data.time_control,
@@ -118,6 +132,7 @@ export default function TournamentDetails() {
 
       const standingsData = await getStandings(id);
       setStandings(standingsData?.standings || []);
+      setTieBreakNames(standingsData?.tie_break_names || []);
 
       // Always fetch registrations to be sure
       const registrationsData = await getTournamentRegistrations(id);
@@ -127,8 +142,10 @@ export default function TournamentDetails() {
       try {
         const pairingsData = await getTournamentPairings(id);
         setPairings(pairingsData?.pairings || []);
+        setRoundsInfo(pairingsData?.rounds_info || []);
       } catch (_) {
         setPairings([]);
+        setRoundsInfo([]);
       }
 
       setLoading(false);
@@ -138,12 +155,23 @@ export default function TournamentDetails() {
     }
   };
 
+  const handleCompleteTournament = async () => {
+    try {
+      await completeTournament(id);
+      toast.success("Tournament completed! Results emails are being sent.");
+      loadTournament();
+      setActiveTab("standings");
+    } catch (error) {
+      toast.error(error.message || "Failed to complete tournament");
+    }
+  };
+
   const handleStartTournament = async () => {
     try {
       await startTournament(id);
       toast.success("Tournament started successfully!");
       loadTournament();
-      navigate(`/arbiter/tournament/${id}/pairings`);
+      setActiveTab("overview");
     } catch (error) {
       toast.error(error.message);
     }
@@ -190,13 +218,48 @@ export default function TournamentDetails() {
       // Refresh standings after scoring
       const standingsData = await getStandings(id);
       setStandings(standingsData?.standings || []);
+      setTieBreakNames(standingsData?.tie_break_names || []);
 
       // Refresh pairings to ensure we have the latest results for dependency checks
       const pairingsData = await getTournamentPairings(id);
       setPairings(pairingsData?.pairings || []);
+      setRoundsInfo(pairingsData?.rounds_info || []);
     } catch (error) {
       toast.error(`Failed to save result: ${error.message}`);
       loadTournament();
+    }
+  };
+
+  const handleFinalizeRound = async () => {
+    try {
+      await finalizeTournamentRound(id, selectedRound);
+      toast.success(`Round ${selectedRound} finalized!`);
+
+      // 1. Manually update the local state so the button lights up instantly
+      setRoundsInfo(prev => prev.map(r =>
+        r.round_number === selectedRound ? { ...r, is_submitted: true } : r
+      ));
+
+      // 2. Then refresh everything from the server to stay in sync
+      await loadTournament();
+
+      // Explicitly refresh standings after finalization
+      const standingsData = await getStandings(id);
+      setStandings(standingsData?.standings || []);
+      setTieBreakNames(standingsData?.tie_break_names || []);
+
+      // Refresh pairings explicitly to ensure we have the fresh data
+      const pairingsData = await getTournamentPairings(id);
+      setPairings(pairingsData?.pairings || []);
+      setRoundsInfo(pairingsData?.rounds_info || []);
+
+      // If this is the final round, automatically redirect to Live Standings
+      if (selectedRound === tournament.rounds) {
+        toast.success("All rounds finished! Checking Final Standings...", { duration: 4000 });
+        setActiveTab("standings");
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to finalize round");
     }
   };
 
@@ -204,22 +267,46 @@ export default function TournamentDetails() {
     setGeneratingPairings(true);
     try {
       await startTournamentPairing(id);
-      toast.success("Next round pairings generated!");
+      toast.success(tournament.current_round === 0 ? "Round 1 pairings generated!" : "Next round pairings generated!");
 
       // 1. Reload tournament data to update currentRound
       await loadTournament();
 
-      // 2. Explicitly refresh standings to reflect scores from the round just completed
+      // 2. Explicitly refresh standings
       const standingsData = await getStandings(id);
       setStandings(standingsData?.standings || []);
+      setTieBreakNames(standingsData?.tie_break_names || []);
 
       // 3. Update the UI to show the newly created round
       const freshData = await getTournamentById(id);
       if (freshData && freshData.current_round) {
         setSelectedRound(freshData.current_round);
       }
+
+      // 4. Switch to Pairings tab to see the new work
+      setActiveTab("pairings");
     } catch (error) {
       toast.error(error.message || "Failed to generate pairings");
+    } finally {
+      setGeneratingPairings(false);
+    }
+  };
+
+  const handleRegeneratePairings = async () => {
+    setGeneratingPairings(true);
+    try {
+      await regenerateTournamentPairing(id);
+      toast.success("Pairings regenerated successfully!");
+
+      // Refresh pairings
+      const pairingsData = await getTournamentPairings(id);
+      setPairings(pairingsData?.pairings || []);
+
+      // Refresh standings in case BYEs changed
+      const standingsData = await getStandings(id);
+      setStandings(standingsData?.standings || []);
+    } catch (error) {
+      toast.error(error.message || "Failed to regenerate pairings");
     } finally {
       setGeneratingPairings(false);
     }
@@ -274,17 +361,21 @@ export default function TournamentDetails() {
 
   const filteredPairings = pairings.filter(p => p.round_number === selectedRound);
   const incompleteMatches = filteredPairings.filter(p => !p.result).length;
+  const allResultsEntered = pairings.length > 0 && pairings.every(p => !!p.result);
+  const isFinalRound = tournament.current_round === tournament.rounds;
 
-  const sortedStandings = [...standings].sort((a, b) => {
-    // Primary sort by points
-    if (b.points !== a.points) return (b.points || 0) - (a.points || 0);
-    // Secondary sort by TB1 (Buchholz Cut 1)
-    if (b.buchholz !== a.buchholz) return (b.buchholz || 0) - (a.buchholz || 0);
-    // Tertiary sort by TB2 (Buchholz Total)
-    if (b.buchholz_total !== a.buchholz_total) return (b.buchholz_total || 0) - (a.buchholz_total || 0);
-    // Quaternary sort by TB3 (Sonneborn-Berger)
-    return (b.sonneborn_berger || 0) - (a.sonneborn_berger || 0);
-  });
+  const currentRoundInfo = roundsInfo.find(r => r.round_number === tournament.current_round);
+  const isCurrentRoundSubmitted = currentRoundInfo ? currentRoundInfo.is_submitted : false;
+  const isSelectedRoundSubmitted = roundsInfo.find(r => r.round_number === selectedRound)?.is_submitted;
+
+  const sortedStandings = standings;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = new Date(tournament.startDate);
+  startDate.setHours(0, 0, 0, 0);
+
+  const canStartTournament = today >= startDate;
 
   const canRegister =
     (tournament.status === "upcoming" || tournament.status === "published") &&
@@ -337,19 +428,18 @@ export default function TournamentDetails() {
           )}
 
           {isArbiter && (tournament.status === "upcoming" || tournament.status === "published") && (
-            <Button onClick={handleStartTournament} variant="default">
+            <Button
+              onClick={handleStartTournament}
+              variant="default"
+              disabled={!canStartTournament}
+              title={!canStartTournament ? `Tournament can only be started from ${tournament.startDate}` : ""}
+            >
               <Play className="h-4 w-4 mr-2" />
               Start Tournament
             </Button>
           )}
 
-          {isArbiter && tournament.status === "active" && (
-            <Button
-              onClick={() => navigate(`/arbiter/tournament/${id}/pairings`)}
-            >
-              Manage Pairings
-            </Button>
-          )}
+          {/* Manage Pairings button removed as requested */}
         </div>
       </div>
 
@@ -478,7 +568,7 @@ export default function TournamentDetails() {
                   <div className="text-sm text-muted-foreground">Entry Fee</div>
                   <div className="font-medium flex items-center gap-1">
                     <DollarSign className="h-3.5 w-3.5" />
-                    {tournament.entryFee === "0"
+                    {Number(tournament.entryFee || 0) === 0
                       ? "Free"
                       : `₹${tournament.entryFee}`}
                   </div>
@@ -675,6 +765,8 @@ export default function TournamentDetails() {
                                     variant="outline"
                                     className="h-8 text-xs text-green-600 hover:text-green-700 border-green-200"
                                     onClick={() => handleStatusUpdate(reg.registration_id, "approved")}
+                                    disabled={tournament.status !== "active"}
+                                    title={tournament.status !== "active" ? "Players can only be accepted after the tournament has started" : ""}
                                   >
                                     Accept
                                   </Button>
@@ -683,6 +775,8 @@ export default function TournamentDetails() {
                                     variant="outline"
                                     className="h-8 text-xs text-red-600 hover:text-red-700 border-red-200"
                                     onClick={() => handleStatusUpdate(reg.registration_id, "rejected")}
+                                    disabled={tournament.status !== "active"}
+                                    title={tournament.status !== "active" ? "Players can only be rejected after the tournament has started" : ""}
                                   >
                                     Reject
                                   </Button>
@@ -728,46 +822,52 @@ export default function TournamentDetails() {
                     </div>
                   )}
                 </div>
-
-                {isArbiter && (
-                  <div className="flex gap-2">
-                    {tournament.current_round === tournament.rounds && incompleteMatches === 0 ? (
-                      <Button
-                        size="sm"
-                        onClick={() => setActiveTab("standings")}
-                        className="bg-success text-success-foreground hover:bg-success/90"
-                      >
-                        <Trophy className="h-4 w-4 mr-1" />
-                        Complete Tournament
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={handleGenerateNextRound}
-                        disabled={generatingPairings || (tournament.current_round > 0 && incompleteMatches > 0)}
-                        title={incompleteMatches > 0 ? `Enter results for ${incompleteMatches} more matches to generate next round` : ""}
-                      >
-                        <Play className="h-4 w-4 mr-1" />
-                        {generatingPairings
-                          ? "Generating..."
-                          : tournament.current_round === 0
-                            ? "Start Round 1"
-                            : `Generate Round ${(tournament.current_round || 0) + 1}`}
-                      </Button>
-                    )}
-                  </div>
+                {isArbiter && filteredPairings.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2 border-primary/20 hover:bg-primary/10 text-primary transition-all shadow-sm max-sm:w-full"
+                    onClick={() => {
+                      // Small delay to ensure any UI rendering before print
+                      setTimeout(() => window.print(), 100);
+                    }}
+                    title="Print pairings for physical display"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print Pairings
+                  </Button>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {pairings.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <Flag className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <div className="text-center py-10 text-muted-foreground flex flex-col items-center justify-center">
+                  <Flag className="h-10 w-10 mb-3 opacity-30" />
                   <p className="text-sm">No pairings generated yet.</p>
                   {isArbiter && (
-                    <p className="text-xs mt-1">
-                      Accept at least 2 players, then click "Start Round 1".
-                    </p>
+                    <div className="mt-6">
+                      {/* Generate Round 1 Pairings Button */}
+                      <Button
+                        variant="primary"
+                        onClick={handleGenerateNextRound}
+                        disabled={generatingPairings || tournament.status !== "active"}
+                        className="bg-chess-gold hover:bg-chess-gold/90 text-black border-none font-bold shadow-md"
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        {generatingPairings ? "Generating..." : "Generate Round 1 Pairings"}
+                      </Button>
+
+                      {tournament.status !== "active" && (
+                        <p className="text-xs mt-3 text-warning">
+                          Tournament must be started before generating pairings.
+                        </p>
+                      )}
+                      {tournament.status === "active" && (
+                        <p className="text-xs mt-3">
+                          Accept at least 2 players, then click "Generate Round 1 Pairings".
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
@@ -829,6 +929,86 @@ export default function TournamentDetails() {
                   </TableBody>
                 </Table>
               )}
+
+              {/* Arbiter Controls at Bottom */}
+              {isArbiter && selectedRound === tournament.current_round && tournament.status === "active" && (
+                <div className="mt-8 flex flex-col items-end gap-6 pt-6 border-t-2 border-dashed border-border">
+
+                  {/* STEP 1: Finalize Current Results */}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-3">
+                      {incompleteMatches > 0 ? (
+                        <span className="text-xs text-warning bg-warning/10 px-2 py-1 rounded">
+                          {incompleteMatches} matches still pending results
+                        </span>
+                      ) : !isCurrentRoundSubmitted ? (
+                        <span className="text-xs text-success font-medium animate-pulse">
+                          Ready to finalize! Click here ➔
+                        </span>
+                      ) : null}
+
+                      <Button
+                        variant={isCurrentRoundSubmitted ? "outline" : "success"}
+                        onClick={handleFinalizeRound}
+                        disabled={isCurrentRoundSubmitted || incompleteMatches > 0 || generatingPairings}
+                        className={`min-w-[180px] shadow-sm transition-all ${!isCurrentRoundSubmitted && incompleteMatches === 0 ? "ring-2 ring-success ring-offset-2 scale-105" : ""
+                          }`}
+                      >
+                        <Flag className="h-4 w-4 mr-2" />
+                        {isCurrentRoundSubmitted ? "Round Results Finalized" : "Submit Final Results"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* STEP 2: Unlock Next Round (Only if not the final round) */}
+                  {tournament.current_round < tournament.rounds && (
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="primary"
+                          onClick={handleGenerateNextRound}
+                          disabled={generatingPairings}
+                          className="min-w-[220px] font-bold shadow-lg bg-chess-gold hover:bg-chess-gold/90 text-black transition-all duration-300 scale-105"
+                        >
+                          {generatingPairings ? (
+                            <div className="h-4 w-4 animate-spin border-2 border-black border-t-transparent rounded-full mr-2" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-2" />
+                          )}
+                          Generate Round {tournament.current_round + 1} Pairings
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 3: Tournament Completion (Final Round Only) */}
+                  {tournament.current_round === tournament.rounds && isCurrentRoundSubmitted && (
+                    <Button
+                      onClick={handleCompleteTournament}
+                      disabled={generatingPairings}
+                      className="bg-success text-success-foreground hover:bg-success/90 shadow-xl px-8 py-6 text-lg font-bold animate-in zoom-in-95"
+                    >
+                      <Trophy className="h-6 w-6 mr-2" />
+                      Complete Tournament & Finalize Standings
+                    </Button>
+                  )}
+
+                  {/* Regenerate Button (Isolated) */}
+                  {!isCurrentRoundSubmitted && filteredPairings.length > 0 && incompleteMatches === filteredPairings.length && (
+                    <div className="w-full flex justify-start -mt-16">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRegeneratePairings}
+                        disabled={generatingPairings}
+                        className="border-warning text-warning hover:bg-warning/10"
+                      >
+                        Regenerate Pairings
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -847,27 +1027,40 @@ export default function TournamentDetails() {
               <div className="border border-[#ccc] overflow-hidden rounded-sm">
                 <Table className="text-xs border-collapse">
                   <TableHeader className="bg-[#f0f0f0] border-b border-[#ccc] text-[#333]">
-                    <TableRow className="hover:bg-transparent h-8">
-                      <TableHead className="w-10 text-center border-r border-[#ccc] font-bold">Rk.</TableHead>
-                      <TableHead className="w-10 text-center border-r border-[#ccc]">SNo</TableHead>
-                      <TableHead className="font-bold border-r border-[#ccc] text-left">Name</TableHead>
+                    <TableRow className="hover:bg-transparent h-8 text-[11px] uppercase tracking-wider font-semibold">
+                      <TableHead className="w-10 text-center border-r border-[#ccc]">Rk.</TableHead>
+                      <TableHead className="w-12 text-center border-r border-[#ccc]">SNo.</TableHead>
+                      <TableHead className="border-r border-[#ccc] text-left pl-4">Name</TableHead>
                       <TableHead className="text-center w-12 border-r border-[#ccc]">FED</TableHead>
                       <TableHead className="text-center w-14 border-r border-[#ccc]">Rtg</TableHead>
                       <TableHead className="text-center w-12 border-r border-[#ccc] font-bold">Pts.</TableHead>
-                      <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz Cut 1">TB1</TableHead>
-                      <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz Total">TB2</TableHead>
-                      <TableHead className="text-center w-12" title="Sonneborn-Berger">TB3</TableHead>
+                      {tieBreakNames.map((name, i) => (
+                        <TableHead
+                          key={i}
+                          className={`text-center w-16 border-r border-[#ccc] ${i === tieBreakNames.length - 1 ? "border-r-0" : ""}`}
+                          title={name}
+                        >
+                          TB{i + 1}
+                        </TableHead>
+                      ))}
+                      {tieBreakNames.length === 0 && (
+                        <>
+                          <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz Cut-1">TB1</TableHead>
+                          <TableHead className="text-center w-12 border-r border-[#ccc]" title="Buchholz">TB2</TableHead>
+                          <TableHead className="text-center w-12" title="Sonneborn-Berger">TB3</TableHead>
+                        </>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedStandings.map((player, index) => (
                       <TableRow
                         key={player.user_id || index}
-                        className={`h-8 border-b border-[#eee] ${index % 2 === 0 ? "bg-white" : "bg-[#f5f5f5]"}`}
+                        className={`h-8 border-b border-[#eee] transition-colors ${index % 2 === 0 ? "bg-white" : "bg-[#f9f9f9]"} hover:bg-[#eef2ff]`}
                       >
-                        <TableCell className="text-center border-r border-[#ccc] font-bold">{index + 1}</TableCell>
+                        <TableCell className="text-center border-r border-[#ccc] font-bold text-gray-700">{index + 1}</TableCell>
                         <TableCell className="text-center border-r border-[#ccc] text-[#666]">{player.starting_no || "-"}</TableCell>
-                        <TableCell className="font-medium border-r border-[#ccc] text-blue-700 hover:underline cursor-pointer">
+                        <TableCell className="font-medium border-r border-[#ccc] text-blue-700 hover:underline cursor-pointer pl-4">
                           {player.player_name || player.name}
                         </TableCell>
                         <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.federation || "IND"}</TableCell>
@@ -875,9 +1068,21 @@ export default function TournamentDetails() {
                         <TableCell className="text-center font-bold border-r border-[#ccc] text-black">
                           {parseFloat(player.points || 0).toFixed(1)}
                         </TableCell>
-                        <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.buchholz?.toFixed(1) || "0.0"}</TableCell>
-                        <TableCell className="text-center text-[#666] border-r border-[#ccc]">{player.buchholz_total?.toFixed(1) || "0.0"}</TableCell>
-                        <TableCell className="text-center text-[#666]">{player.sonneborn_berger?.toFixed(2) || "0.00"}</TableCell>
+                        {tieBreakNames.map((name, i) => (
+                          <TableCell
+                            key={i}
+                            className={`text-center text-[#666] border-r border-[#ccc] ${i === tieBreakNames.length - 1 ? "border-r-0" : ""}`}
+                          >
+                            {(player[`tb${i + 1}`] || 0.0).toFixed(name === "Sonneborn-Berger" ? 2 : 1)}
+                          </TableCell>
+                        ))}
+                        {tieBreakNames.length === 0 && (
+                          <>
+                            <TableCell className="text-center text-[#666] border-r border-[#ccc]">{(player.buchholz || 0.0).toFixed(1)}</TableCell>
+                            <TableCell className="text-center text-[#666] border-r border-[#ccc]">{(player.buchholz_total || 0.0).toFixed(1)}</TableCell>
+                            <TableCell className="text-center text-[#666]">{(player.sonneborn_berger || 0.0).toFixed(2)}</TableCell>
+                          </>
+                        )}
                       </TableRow>
                     ))}
                     {sortedStandings.length === 0 && (
@@ -890,8 +1095,8 @@ export default function TournamentDetails() {
                   </TableBody>
                 </Table>
               </div>
-              <div className="mt-4 text-[10px] text-muted-foreground italic">
-                Annotation: Tie Break1: Buchholz Tie-Breaks (Cut 1), Tie Break2: Buchholz Tie-Breaks (Total), Tie Break3: Sonneborn-Berger Tie-Breaks
+              <div className="mt-4 text-[10px] text-muted-foreground italic flex justify-between items-center">
+                <span>Annotation: {tieBreakNames.map((name, i) => `Tie Break${i + 1}: ${name}`).join(", ")}</span>
               </div>
             </CardContent>
           </Card>

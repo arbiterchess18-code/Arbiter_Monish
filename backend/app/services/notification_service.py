@@ -14,6 +14,7 @@ class NotifType:
     ROUND_PAIRING = "ROUND_PAIRING"
     REGISTRATION_APPROVED = "REGISTRATION_APPROVED"
     REGISTRATION_REJECTED = "REGISTRATION_REJECTED"
+    TOURNAMENT_STARTED = "TOURNAMENT_STARTED"
 
 
 def create_notification(
@@ -134,6 +135,23 @@ def get_user_notifications(
         .limit(limit)
         .all()
     )
+
+
+def notify_tournament_started(
+    db: Session,
+    *,
+    tournament: models.Tournament,
+    player_ids: list[int],
+) -> None:
+    """Bulk-notify all players when the tournament officially starts."""
+    for uid in player_ids:
+        create_notification(
+            db,
+            user_id=uid,
+            notif_type=NotifType.TOURNAMENT_STARTED,
+            message=f"The tournament '{tournament.tournament_name}' has officially started!",
+            tournament_id=tournament.tournament_id,
+        )
 
 
 def get_unread_count(db: Session, *, user_id: int) -> int:
