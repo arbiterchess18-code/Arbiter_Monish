@@ -76,6 +76,111 @@ async def list_arbiter_tournaments(
         ).count()
     return tournaments
 
+@router.get("/stats/overview")
+async def get_statistics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Get tournament statistics for the current arbiter/organizer"""
+    from sqlalchemy import func, extract
+    from datetime import datetime, timedelta
+    
+    # Get all tournaments created by the current user
+    tournaments = db.query(models.Tournament).filter(
+        models.Tournament.created_by == current_user.user_id
+    ).all()
+    
+    tournament_ids = [t.tournament_id for t in tournaments]
+    
+    if not tournament_ids:
+        return {
+            "totalMatches": 0,
+            "completedTournaments": len([t for t in tournaments if t.status == "completed"]),
+            "avgPlayers": 0,
+            "avgRating": 0,
+            "monthlyMatches": [],
+            "matchResults": []
+        }
+    
+    # Calculate total matches
+    total_matches = db.query(func.count(models.Match.match_id)).filter(
+        models.Match.tournament_id.in_(tournament_ids)
+    ).scalar() or 0
+    
+    # Count completed tournaments
+    completed_tournaments = len([t for t in tournaments if t.status == "completed"])
+    
+    # Calculate average players per tournament
+    avg_players = 0
+    if tournament_ids:
+        player_counts = []
+        for tid in tournament_ids:
+            count = db.query(models.TournamentRegistration).filter(
+                models.TournamentRegistration.tournament_id == tid,
+                models.TournamentRegistration.status.in_(["approved", "active"])
+            ).count()
+            player_counts.append(count)
+        avg_players = int(sum(player_counts) / len(player_counts)) if player_counts else 0
+    
+    # Calculate average rating of players
+    avg_rating = 0
+    all_registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id.in_(tournament_ids)
+    ).all()
+    
+    if all_registrations:
+        ratings = []
+        for reg in all_registrations:
+            user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
+            if user:
+                ratings.append(user.fide_rating or 0)
+        avg_rating = int(sum(ratings) / len(ratings)) if ratings else 0
+    
+    # Get monthly match data for the last 6 months
+    now = datetime.now()
+    six_months_ago = now - timedelta(days=180)
+    
+    monthly_data = {}
+    for i in range(6):
+        date = now - timedelta(days=30*i)
+        month_key = date.strftime("%b")
+        monthly_data[month_key] = 0
+    
+    matches = db.query(models.Match).filter(
+        models.Match.tournament_id.in_(tournament_ids),
+        models.Match.created_at >= six_months_ago
+    ).all()
+    
+    for match in matches:
+        month_key = match.created_at.strftime("%b")
+        if month_key in monthly_data:
+            monthly_data[month_key] += 1
+    
+    monthly_matches = [{"month": month, "matches": count} for month, count in reversed(list(monthly_data.items()))]
+    
+    # Get match result distribution
+    match_results = db.query(models.Match.result, func.count(models.Match.match_id)).filter(
+        models.Match.tournament_id.in_(tournament_ids)
+    ).group_by(models.Match.result).all()
+    
+    result_dist = []
+    for result, count in match_results:
+        if result == "1-0":
+            result_dist.append({"result": "White Wins", "count": count})
+        elif result == "0-1":
+            result_dist.append({"result": "Black Wins", "count": count})
+        elif result == "1/2-1/2":
+            result_dist.append({"result": "Draws", "count": count})
+    
+    return {
+        "totalMatches": total_matches,
+        "completedTournaments": completed_tournaments,
+        "avgPlayers": avg_players,
+        "avgRating": avg_rating,
+        "monthlyMatches": monthly_matches,
+        "matchResults": result_dist
+    }
+
 @router.get("/{tournament_id}", response_model=TournamentResponse)
 async def get_tournament(tournament_id: int, db: Session = Depends(get_db)):
     tournament = db.query(models.Tournament).filter(

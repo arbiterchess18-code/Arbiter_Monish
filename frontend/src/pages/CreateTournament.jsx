@@ -51,7 +51,8 @@ export default function CreateTournament() {
   const [searchParams] = useSearchParams();
   const editTournamentId = searchParams.get("edit");
   const { role } = useRole();
-  const canCreateTournament = role === "arbiter" || role === "admin";
+  const canCreateTournament =
+    role === "arbiter" || role === "admin" || role === "organization";
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -550,7 +551,8 @@ export default function CreateTournament() {
       if (tournamentData.pairingSystem === "Swiss") {
         const tbs = tournamentData.tie_break_config || [];
         if (tbs.length < 5) {
-          newErrors.tieBreakers = "Select at least 5 tie breakers in priority order";
+          newErrors.tieBreakers =
+            "Select at least 5 tie breakers in priority order";
           isValid = false;
         }
       }
@@ -675,18 +677,20 @@ export default function CreateTournament() {
         {[1, 2, 3].map((step) => (
           <div key={step} className="flex items-center flex-1">
             <div
-              className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm transition-colors ${currentStep >= step
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-                }`}
+              className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm transition-colors ${
+                currentStep >= step
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               {step < currentStep && <CheckCircle2 className="w-5 h-5" />}
               {step >= currentStep && step}
             </div>
             {step < 3 && (
               <div
-                className={`flex-1 h-1 mx-2 rounded ${currentStep > step ? "bg-primary" : "bg-muted"
-                  }`}
+                className={`flex-1 h-1 mx-2 rounded ${
+                  currentStep > step ? "bg-primary" : "bg-muted"
+                }`}
               />
             )}
           </div>
@@ -710,7 +714,8 @@ export default function CreateTournament() {
         <Card className="border-destructive/40 bg-destructive/5">
           <CardContent className="pt-6">
             <p className="text-sm text-destructive">
-              Only users with Arbiter/Admin role can create tournaments.
+              Only users with Arbiter/Admin/Organization role can create
+              tournaments.
             </p>
           </CardContent>
         </Card>
@@ -776,8 +781,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("startDate", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.startDate ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.startDate ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.startDate && (
                     <p className="text-sm text-destructive mt-1">
@@ -796,8 +802,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("startTime", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.startTime ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.startTime ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.startTime && (
                     <p className="text-sm text-destructive mt-1">
@@ -850,8 +857,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("contactPerson", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.contactPerson ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.contactPerson ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.contactPerson && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -874,8 +882,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("contactEmail", e.target.value)
                       }
-                      className={`mt-1.5 pl-10 ${errors.contactEmail ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 pl-10 ${
+                        errors.contactEmail ? "border-destructive" : ""
+                      }`}
                     />
                   </div>
                   {errors.contactEmail && (
@@ -898,8 +907,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("contactPhone", e.target.value)
                       }
-                      className={`mt-1.5 pl-10 ${errors.contactPhone ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 pl-10 ${
+                        errors.contactPhone ? "border-destructive" : ""
+                      }`}
                     />
                   </div>
                   {errors.contactPhone && (
@@ -929,8 +939,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("venueName", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.venueName ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.venueName ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.venueName && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -977,8 +988,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("country", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.country ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.country ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.country && (
                     <p className="text-sm text-destructive mt-1">
@@ -1002,8 +1014,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("googleMapsLink", e.target.value)
                     }
-                    className={`mt-1.5 pl-10 ${errors.googleMapsLink ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 pl-10 ${
+                      errors.googleMapsLink ? "border-destructive" : ""
+                    }`}
                   />
                 </div>
               </div>
@@ -1027,8 +1040,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("organizerName", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.organizerName ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.organizerName ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.organizerName && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -1101,8 +1115,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("entryFee", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.entryFee ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.entryFee ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.entryFee && (
                     <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -1138,8 +1153,9 @@ export default function CreateTournament() {
                     }
                   >
                     <SelectTrigger
-                      className={`mt-1.5 ${errors.eventType ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.eventType ? "border-destructive" : ""
+                      }`}
                     >
                       <SelectValue placeholder="Select event type" />
                     </SelectTrigger>
@@ -1194,8 +1210,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("timeControl", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.timeControl ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.timeControl ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.timeControl && (
                     <p className="text-sm text-destructive mt-1">
@@ -1216,8 +1233,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("increment", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.increment ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.increment ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.increment && (
                     <p className="text-sm text-destructive mt-1">
@@ -1237,8 +1255,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("rounds", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.rounds ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.rounds ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.rounds && (
                     <p className="text-sm text-destructive mt-1">
@@ -1338,12 +1357,19 @@ export default function CreateTournament() {
                     <Settings className="w-5 h-5" /> Tie Breaker Rules
                   </div>
                   {tournamentData.tie_break_config?.length >= 5 ? (
-                    <Badge variant="success" className="bg-green-100 text-green-700 hover:bg-green-100">
+                    <Badge
+                      variant="success"
+                      className="bg-green-100 text-green-700 hover:bg-green-100"
+                    >
                       Minimum 5 reach
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">
-                      Select {5 - (tournamentData.tie_break_config?.length || 0)} more
+                    <Badge
+                      variant="outline"
+                      className="text-orange-600 border-orange-200 bg-orange-50"
+                    >
+                      Select{" "}
+                      {5 - (tournamentData.tie_break_config?.length || 0)} more
                     </Badge>
                   )}
                 </div>
@@ -1351,7 +1377,9 @@ export default function CreateTournament() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Available Rules */}
                   <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Available Methods</Label>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Available Methods
+                    </Label>
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                       {[
                         "Buchholz",
@@ -1364,19 +1392,25 @@ export default function CreateTournament() {
                         "Number of Games with Black",
                         "Average Rating of Opponents (ARO)",
                       ].map((method) => {
-                        const isSelected = tournamentData.tie_break_config?.includes(method);
+                        const isSelected =
+                          tournamentData.tie_break_config?.includes(method);
                         return (
                           <div
                             key={method}
                             onClick={() => toggleTieBreaker(method)}
-                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${isSelected
-                              ? "bg-primary/5 border-primary/40 opacity-50"
-                              : "hover:bg-muted/80 border-border"
-                              }`}
+                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${
+                              isSelected
+                                ? "bg-primary/5 border-primary/40 opacity-50"
+                                : "hover:bg-muted/80 border-border"
+                            }`}
                           >
                             <div className="flex flex-col">
-                              <span className="text-sm font-medium">{method}</span>
-                              <span className="text-[10px] text-muted-foreground">Click to {isSelected ? "remove" : "add"}</span>
+                              <span className="text-sm font-medium">
+                                {method}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                Click to {isSelected ? "remove" : "add"}
+                              </span>
                             </div>
                             {isSelected ? (
                               <CheckCircle2 className="w-4 h-4 text-primary" />
@@ -1391,7 +1425,9 @@ export default function CreateTournament() {
 
                   {/* Selected Priority */}
                   <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Priority Order (TB1, TB2...)</Label>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Priority Order (TB1, TB2...)
+                    </Label>
                     <div className="space-y-2 border rounded-xl p-4 bg-muted/30 min-h-[100px]">
                       {tournamentData.tie_break_config?.length === 0 && (
                         <div className="text-center py-8 text-muted-foreground text-sm italic">
@@ -1406,7 +1442,9 @@ export default function CreateTournament() {
                           <div className="flex-none flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
                             {idx + 1}
                           </div>
-                          <span className="flex-1 text-sm font-medium truncate">{method}</span>
+                          <span className="flex-1 text-sm font-medium truncate">
+                            {method}
+                          </span>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
                               variant="ghost"
@@ -1421,7 +1459,10 @@ export default function CreateTournament() {
                               variant="ghost"
                               size="icon"
                               className="w-7 h-7"
-                              disabled={idx === (tournamentData.tie_break_config?.length - 1)}
+                              disabled={
+                                idx ===
+                                tournamentData.tie_break_config?.length - 1
+                              }
                               onClick={() => moveTieBreaker(idx, 1)}
                             >
                               <ChevronLeft className="w-3 h-3 -rotate-90" />
@@ -1472,10 +1513,11 @@ export default function CreateTournament() {
                 }}
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handlePdfDrop}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/30"
-                  }`}
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  isDragOver
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/30"
+                }`}
               >
                 <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mb-3">
@@ -1566,8 +1608,9 @@ export default function CreateTournament() {
                         onChange={(e) =>
                           handleInputChange(item.field, e.target.value)
                         }
-                        className={`mt-1.5 ${errors[item.field] ? "border-destructive" : ""
-                          }`}
+                        className={`mt-1.5 ${
+                          errors[item.field] ? "border-destructive" : ""
+                        }`}
                       />
                       {errors[item.field] && (
                         <p className="text-sm text-destructive mt-1">
@@ -1676,8 +1719,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("accountHolderName", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.accountHolderName ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.accountHolderName ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.accountHolderName && (
                     <p className="text-sm text-destructive mt-1">
@@ -1697,8 +1741,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("accountNumber", e.target.value)
                       }
-                      className={`mt-1.5 ${errors.accountNumber ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.accountNumber ? "border-destructive" : ""
+                      }`}
                     />
                     {errors.accountNumber && (
                       <p className="text-sm text-destructive mt-1">
@@ -1720,8 +1765,9 @@ export default function CreateTournament() {
                           e.target.value.toUpperCase(),
                         )
                       }
-                      className={`mt-1.5 ${errors.ifscCode ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.ifscCode ? "border-destructive" : ""
+                      }`}
                     />
                     {errors.ifscCode && (
                       <p className="text-sm text-destructive mt-1">

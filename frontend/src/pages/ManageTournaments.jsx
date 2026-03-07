@@ -68,19 +68,20 @@ export default function ManageTournaments() {
   };
 
   useEffect(() => {
-    if (role === "arbiter" || role === "admin") {
+    if (role === "arbiter" || role === "admin" || role === "organization") {
       fetchTournaments();
     }
   }, [role]);
 
-  if (role !== "arbiter" && role !== "admin") {
+  if (role !== "arbiter" && role !== "admin" && role !== "organization") {
     return (
       <div className="max-w-4xl mx-auto space-y-6 pb-10">
         <PageHeader title="Manage Tournaments" description="Access denied" />
         <Card className="border-destructive/40 bg-destructive/5">
           <CardContent className="pt-6">
             <p className="text-destructive text-sm">
-              Only Arbiter/Admin can access the Manage Tournament page.
+              Only Arbiter/Admin/Organization can access the Manage Tournament
+              page.
             </p>
           </CardContent>
         </Card>
@@ -118,7 +119,7 @@ export default function ManageTournaments() {
     try {
       await updateTournament(tournament.id, {
         status: newStatus,
-        is_private: isCurrentlyPublished // If unpublishing, maybe make it private? Or just rely on status.
+        is_private: isCurrentlyPublished, // If unpublishing, maybe make it private? Or just rely on status.
       });
       toast.success(
         isCurrentlyPublished
@@ -172,7 +173,8 @@ export default function ManageTournaments() {
             today.setHours(0, 0, 0, 0);
             const startDate = new Date(t.date);
             startDate.setHours(0, 0, 0, 0);
-            const cannotUnpublish = t.status === "published" && today >= startDate;
+            const cannotUnpublish =
+              t.status === "published" && today >= startDate;
             const cannotDelete = t.status === "active";
 
             return (
@@ -240,7 +242,11 @@ export default function ManageTournaments() {
                       setActionType("delete");
                     }}
                     disabled={cannotDelete}
-                    title={cannotDelete ? "Cannot delete an ongoing tournament" : "Delete tournament"}
+                    title={
+                      cannotDelete
+                        ? "Cannot delete an ongoing tournament"
+                        : "Delete tournament"
+                    }
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                   </Button>

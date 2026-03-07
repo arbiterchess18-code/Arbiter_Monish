@@ -1,43 +1,92 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
-import { mockOrbiterStats } from "@/lib/mock-data";
 import { Swords, Trophy, Target, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { motion } from "framer-motion";
+import axios from "axios";
+import { useState, useEffect } from "react";
 
-const matchDist = [
-  { result: "White Wins", count: 145 },
-  { result: "Black Wins", count: 128 },
-  { result: "Draws", count: 92 },
-];
 const COLORS = ["hsl(var(--success))", "hsl(var(--primary))", "hsl(var(--warning))"];
 
-const monthlyData = [
-  { month: "Sep", matches: 68 },
-  { month: "Oct", matches: 92 },
-  { month: "Nov", matches: 115 },
-  { month: "Dec", matches: 78 },
-  { month: "Jan", matches: 134 },
-  { month: "Feb", matches: 155 },
-];
-
 export default function OrbiterStats() {
+  const [stats, setStats] = useState({
+    totalMatches: 0,
+    completedTournaments: 0,
+    avgPlayers: 0,
+    avgRating: 0,
+    monthlyMatches: [],
+    matchResults: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const token = sessionStorage.getItem("authToken");
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/tournaments/stats/overview`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setStats(response.data);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to fetch statistics:", err);
+      setError("Failed to load statistics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <PageHeader title="Tournament Statistics" description="Analytics across all managed tournaments" />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-3"></div>
+            <p className="text-muted-foreground">Loading statistics...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <PageHeader title="Tournament Statistics" description="Analytics across all managed tournaments" />
+        <div className="bg-destructive/10 border border-destructive rounded-lg p-4 text-destructive text-center">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader title="Tournament Statistics" description="Analytics across all managed tournaments" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Matches" value={mockOrbiterStats.totalMatchesPlayed} icon={Swords} delay={0} />
-        <StatCard title="Completed" value={mockOrbiterStats.completedTournaments} icon={Trophy} delay={0.1} />
-        <StatCard title="Avg Players" value={35} icon={Target} delay={0.15} />
-        <StatCard title="Avg Rating" value={2120} icon={TrendingUp} delay={0.2} />
+        <StatCard title="Total Matches" value={stats.totalMatches} icon={Swords} delay={0} />
+        <StatCard title="Completed" value={stats.completedTournaments} icon={Trophy} delay={0.1} />
+        <StatCard title="Avg Players" value={stats.avgPlayers} icon={Target} delay={0.15} />
+        <StatCard title="Avg Rating" value={stats.avgRating} icon={TrendingUp} delay={0.2} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="stat-card">
           <h2 className="font-display font-semibold text-lg mb-4">Monthly Matches</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={monthlyData}>
+            <BarChart data={stats.monthlyMatches && stats.monthlyMatches.length > 0 ? stats.monthlyMatches : [{ month: "No data", matches: 0 }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
@@ -51,8 +100,15 @@ export default function OrbiterStats() {
           <h2 className="font-display font-semibold text-lg mb-4">Result Distribution</h2>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={matchDist} innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="count" label={({ result, percent }) => `${result} ${(percent * 100).toFixed(0)}%`}>
-                {matchDist.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+              <Pie 
+                data={stats.matchResults && stats.matchResults.length > 0 ? stats.matchResults : [{ result: "No matches", count: 0 }]} 
+                innerRadius={60} 
+                outerRadius={90} 
+                paddingAngle={3} 
+                dataKey="count" 
+                label={({ result, percent }) => `${result} ${(percent * 100).toFixed(0)}%`}
+              >
+                {(stats.matchResults || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
               <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
             </PieChart>
