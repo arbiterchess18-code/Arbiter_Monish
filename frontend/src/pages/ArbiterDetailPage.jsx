@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import axios from "axios";
+import { apiFetch } from "@/lib/api";
 
 const ArbiterDetailPage = () => {
   const { id } = useParams();
@@ -32,18 +32,10 @@ const ArbiterDetailPage = () => {
   const fetchArbiterDetails = async () => {
     try {
       setLoading(true);
-      const token = sessionStorage.getItem("authToken");
-
-      // Fetch from API
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/users/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      setArbiter(response.data);
+      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/${id}`);
+      if (!response.ok) throw new Error("Network response was not ok");
+      const data = await response.json();
+      setArbiter(data);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch arbiter details:", err);

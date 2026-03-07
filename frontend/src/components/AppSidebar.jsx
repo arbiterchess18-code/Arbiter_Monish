@@ -15,6 +15,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +28,7 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { useRole } from "@/lib/role-context";
+import { apiFetch } from "@/lib/api";
 
 const orbiterConductingLinks = [
   { title: "Arbiter Home", url: "/arbiter-userhome", icon: LayoutDashboard },
@@ -49,7 +51,6 @@ const organizationConductingLinks = [
   { title: "Manage Tournaments", url: "/orbiter/manage", icon: Settings },
   { title: "Arbiters", url: "/arbiters", icon: Crown },
   { title: "Statistics", url: "/orbiter/stats", icon: BarChart3 },
-  { title: "Organizer Requests", url: "/orbiter/requests", icon: Users },
 ];
 
 const orbiterPlayingLinks = [
@@ -71,12 +72,17 @@ const userLinks = [
 
 export function AppSidebar() {
   const { role, setRole } = useRole();
+  const navigate = useNavigate();
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("authToken");
+  const handleLogout = async () => {
+    try {
+      await apiFetch(`${import.meta.env.VITE_API_URL}/logout`, { method: "POST" });
+    } catch (e) {
+      console.error("Logout error:", e);
+    }
     sessionStorage.removeItem("userData");
     window.dispatchEvent(new Event("authChange"));
-    window.location.href = "/login";
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -87,7 +93,7 @@ export function AppSidebar() {
             <Crown className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-display font-bold text-base">ChessMgr</h2>
+            <h2 className="font-display font-bold text-base">ChessArena</h2>
             <p className="text-[11px] text-muted-foreground capitalize">
               {role} Panel
             </p>

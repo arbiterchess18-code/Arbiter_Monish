@@ -1,13 +1,15 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from .... import models
 from ....database import get_db
 from ....core.security import verify_password, get_password_hash, create_access_token
-from ....core.config import ACCESS_TOKEN_EXPIRE_MINUTES
+from ....core.config import ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
+import jwt
 from ....schemas.token import Token
 from ....schemas.user import UserCreate
 from ....core.limiter import limiter
@@ -15,9 +17,9 @@ from ....core.limiter import limiter
 router = APIRouter()
 
 
-@router.post("/token", response_model=Token)
+@router.post("/token")
 @limiter.limit("5/minute")
-async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(
         models.User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -39,18 +41,92 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         data={"sub": user.username, "roles": roles},
         expires_delta=access_token_expires
     )
+    
+    refresh_token_expires = timedelta(days=7)
+    refresh_token = create_access_token(
+        data={"sub": user.username, "roles": roles},
+        expires_delta=refresh_token_expires
+    )
 
-    return {
-        "access_token": access_token,
+    json_response = JSONResponse(content={
+        "access_token": access_token, # keep for backwards compatibility briefly if needed
         "token_type": "bearer",
         "userData": {
-            "user_id": user.user_id,          # needed for Supabase Realtime filter
+            "user_id": user.user_id,
             "firstName": user.first_name or user.username,
             "lastName": user.last_name or "",
             "email": user.email,
-            "role": primary_role
+            "role": primary_role,
+            "profile_picture_url": user.profile_picture_url
         }
-    }
+    })
+    
+    json_response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    
+    json_response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/refresh",
+        max_age=7 * 24 * 60 * 60
+    )
+
+    return json_response
+
+@router.post("/refresh")
+async def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+            
+        roles = [ur.role.role_name.upper() for ur in user.user_roles]
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.username, "roles": roles},
+            expires_delta=access_token_expires
+        )
+        
+        response.set_cookie(
+            key="access_token",
+            value=f"Bearer {access_token}",
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="access_token", samesite="none", secure=True)
+    response.delete_cookie(key="refresh_token", path="/refresh", samesite="none", secure=True)
+    return {"message": "Logged out successfully"}
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)

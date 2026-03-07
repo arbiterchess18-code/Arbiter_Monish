@@ -80,6 +80,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_cache_control_header(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/users") or request.url.path.startswith("/api/v1/users"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return response
+
 # Include Routers
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(users_router.router, prefix="/users", tags=["Users"])

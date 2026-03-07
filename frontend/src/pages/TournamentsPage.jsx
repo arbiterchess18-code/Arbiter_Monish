@@ -24,13 +24,17 @@ export default function TournamentsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadTournaments();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      loadTournaments();
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, typeFilter, statusFilter]);
 
   const loadTournaments = async () => {
     setLoading(true);
     try {
-      const realTournaments = await getPublicTournaments();
+      const realTournaments = await getPublicTournaments({ search, type: typeFilter, status: statusFilter });
 
       // Standardize IDs for real tournaments
       const standardizedReal = realTournaments.map(t => ({
@@ -55,14 +59,6 @@ export default function TournamentsPage() {
   const handleCardClick = (tournament) => {
     navigate(`/tournament/${tournament.id}`);
   };
-
-  const filtered = allTournaments.filter((t) => {
-    if (search && !t.name.toLowerCase().includes(search.toLowerCase()))
-      return false;
-    if (typeFilter !== "all" && t.type !== typeFilter) return false;
-    if (statusFilter !== "all" && t.status !== statusFilter) return false;
-    return true;
-  });
 
   return (
     <div className="space-y-6">
@@ -111,14 +107,14 @@ export default function TournamentsPage() {
         <div className="flex items-center justify-center py-20">
           <div className="loader"></div>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : allTournaments.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <p className="font-display text-lg">No tournaments found</p>
           <p className="text-sm mt-1">Try adjusting your filters</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((t, i) => (
+          {allTournaments.map((t, i) => (
             <div
               key={t.id}
               onClick={() => handleCardClick(t)}

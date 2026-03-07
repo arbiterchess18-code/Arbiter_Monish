@@ -58,38 +58,38 @@ export function TournamentCard({ tournament, index = 0, showJoin, onJoin, hideAc
       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mt-2">
         <div className="flex items-center gap-1.5">
           <Users className="h-3.5 w-3.5" />
-          {tournament.players}/{tournament.maxPlayers || '--'}
+          {tournament.registered_count ?? tournament.players ?? 0}/{tournament.max_players ?? tournament.maxPlayers ?? '--'}
         </div>
         <div className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5" />
-          {tournament.timeControl || 'Standard'}
+          {tournament.time_control ?? tournament.timeControl ?? 'Standard'}
         </div>
         <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5" />
-          {tournament.date || tournament.startDate || '--'}
+          {tournament.start_date ?? tournament.date ?? tournament.startDate ?? '--'}
         </div>
         <div className="flex items-center gap-1.5">
           <MapPin className="h-3.5 w-3.5" />
-          {tournament.location || tournament.city || tournament.mode || 'Online'}
+          {tournament.venue_name ? `${tournament.venue_name}${tournament.city ? `, ${tournament.city}` : ''}` : (tournament.location || tournament.city || tournament.mode || 'Online')}
         </div>
       </div>
 
       {tournament.status === "active" && (
         <div className="mt-1">
           <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Round {tournament.currentRound || 0}/{tournament.rounds || 0}</span>
-            <span>{Math.round(((tournament.currentRound || 0) / (tournament.rounds || 1)) * 100)}%</span>
+            <span>Round {tournament.current_round ?? tournament.currentRound ?? 0}/{tournament.rounds ?? 0}</span>
+            <span>{Math.round(((tournament.current_round ?? tournament.currentRound ?? 0) / (tournament.rounds || 1)) * 100)}%</span>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${((tournament.currentRound || 0) / (tournament.rounds || 1)) * 100}%` }}
+              style={{ width: `${((tournament.current_round ?? tournament.currentRound ?? 0) / (tournament.rounds || 1)) * 100}%` }}
             />
           </div>
         </div>
       )}
 
-      {!hideActions && showJoin && tournament.status === "upcoming" && tournament.players < (tournament.maxPlayers || 999) && (
+      {!hideActions && showJoin && tournament.status === "upcoming" && (tournament.registered_count ?? tournament.players ?? 0) < (tournament.max_players ?? tournament.maxPlayers ?? 999) && (
         <Button size="sm" className="mt-2 w-full" onClick={() => onJoin?.(tournament)}>
           Join Tournament
         </Button>

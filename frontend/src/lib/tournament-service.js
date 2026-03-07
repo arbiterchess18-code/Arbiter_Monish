@@ -3,32 +3,20 @@
  * Handles tournament operations, Swiss pairing, tie-breakers, and player management
  */
 
+import { apiFetch as fetch } from "./api.js";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const getAuthHeaders = () => {
-  const token = sessionStorage.getItem("authToken");
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 };
 
-/**
- * Handle API responses and catch 401s
- */
 const handleResponse = async (response) => {
-  if (response.status === 401) {
-    // Session expired or invalid
-    sessionStorage.removeItem("authToken");
-    sessionStorage.removeItem("userData");
-    window.dispatchEvent(new Event("authChange"));
-
-    // Use a slight delay to allow the current flow to finish
-    setTimeout(() => {
-      window.location.href = "/login?expired=true";
-    }, 100);
-
-    throw new Error("Session expired. Please log in again.");
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Session expired. Please log in again.");
+    }
   }
   return response;
 };
@@ -109,9 +97,15 @@ export const getArbiterTournaments = async () => {
 /**
  * Get all public (published) tournaments
  */
-export const getPublicTournaments = async () => {
+export const getPublicTournaments = async (filters = {}) => {
   try {
-    const response = await fetch(`${API_URL}/tournaments/public`);
+    const params = new URLSearchParams();
+    if (filters.search) params.append("search", filters.search);
+    if (filters.type && filters.type !== "all") params.append("type", filters.type);
+    if (filters.status && filters.status !== "all") params.append("status", filters.status);
+
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_URL}/tournaments/public${queryString}`);
     await handleResponse(response);
     return await response.json();
   } catch (error) {

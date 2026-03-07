@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { apiFetch } from "@/lib/api";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination, EffectFade } from "swiper/modules";
 
@@ -37,7 +38,7 @@ const Login = () => {
       body.append("username", email); // Using email as username for now as per form
       body.append("password", password);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/token`, {
+      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -53,11 +54,7 @@ const Login = () => {
 
       const data = await response.json();
 
-      // Use sessionStorage instead of localStorage:
-      // - Scoped to the current tab (prevents cross-tab token leaks)
-      // - Automatically cleared when the browser tab/window is closed
       sessionStorage.setItem("userData", JSON.stringify(data.userData));
-      sessionStorage.setItem("authToken", data.access_token);
       window.dispatchEvent(new Event("authChange"));
 
       // Role-based redirection
