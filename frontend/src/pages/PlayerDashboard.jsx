@@ -1,15 +1,46 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { TournamentCard } from "@/components/TournamentCard";
-import { Trophy, Swords, TrendingUp, BarChart3, Target, Zap, Award } from "lucide-react";
+import { Trophy, Swords, TrendingUp, BarChart3, Target, Zap, Award, Loader2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { motion } from "framer-motion";
-import { mockTournaments, mockUserStats, mockRatingHistory } from "@/lib/mock-data";
+import { mockTournaments, mockRatingHistory } from "@/lib/mock-data";
+import { apiFetch } from "@/lib/api";
 
 const PlayerDashboard = () => {
     const upcomingTournaments = mockTournaments.filter(t => t.status === "upcoming").slice(0, 3);
     const activeTournaments = mockTournaments.filter(t => t.status === "active");
+
+    const [stats, setStats] = useState({});
+    const [unlocked, setUnlocked] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchDashboardData() {
+            try {
+                const res = await apiFetch(`${import.meta.env.VITE_API_URL}/users/me/achievements`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setStats(data.stats || {});
+                    setUnlocked(data.unlocked || []);
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchDashboardData();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 pb-10">
@@ -31,10 +62,10 @@ const PlayerDashboard = () => {
 
             {/* Primary Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard title="Current Rating" value={mockUserStats.currentRating} icon={TrendingUp} delay={0} trend="+28 this month" trendUp />
-                <StatCard title="Total Matches" value={mockUserStats.totalMatches} icon={Swords} delay={0.1} />
-                <StatCard title="Win Rate" value={`${Math.round((mockUserStats.wins / mockUserStats.totalMatches) * 100)}%`} icon={BarChart3} delay={0.2} />
-                <StatCard title="Achievements" value="12" icon={Award} delay={0.3} trend="Top 5% locally" trendUp />
+                <StatCard title="Current Rating" value={stats.current_rating || 0} icon={TrendingUp} delay={0} />
+                <StatCard title="Total Matches" value={stats.total_matches || 0} icon={Swords} delay={0.1} />
+                <StatCard title="Win Rate" value={`${stats.win_rate || 0}%`} icon={BarChart3} delay={0.2} trend={`${stats.total_wins} Wins`} trendUp={(stats.win_rate || 0) >= 50} />
+                <StatCard title="Achievements" value={unlocked.length} icon={Award} delay={0.3} trend={`${8 - unlocked.length} Locked`} trendUp />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

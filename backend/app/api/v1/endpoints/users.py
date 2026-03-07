@@ -125,25 +125,57 @@ async def get_my_achievements(
         "rapid_wins": 0,
         "total_wins": 0,
         "total_draws": 0,
+        "total_losses": 0,
+        "total_matches": len(matches),
         "classical_games": 0,
+        "tournaments_played": len(set(tournament.tournament_id for match, tournament in matches)),
+        "white_wins": 0,
+        "white_draws": 0,
+        "white_losses": 0,
+        "black_wins": 0,
+        "black_draws": 0,
+        "black_losses": 0
     }
 
     for match, tournament in matches:
         is_white = match.white_player_id == current_user.user_id
         
         # Check result
-        if (is_white and match.result == "1-0") or (not is_white and match.result == "0-1"):
-            stats["total_wins"] += 1
-            if tournament.event_type and "blitz" in tournament.event_type.lower():
-                stats["blitz_wins"] += 1
-            elif tournament.event_type and "rapid" in tournament.event_type.lower():
-                stats["rapid_wins"] += 1
+        if match.result == "1-0":
+            if is_white:
+                stats["total_wins"] += 1
+                stats["white_wins"] += 1
+                if tournament.event_type and "blitz" in tournament.event_type.lower():
+                    stats["blitz_wins"] += 1
+                elif tournament.event_type and "rapid" in tournament.event_type.lower():
+                    stats["rapid_wins"] += 1
+            else:
+                stats["total_losses"] += 1
+                stats["black_losses"] += 1
+        elif match.result == "0-1":
+            if not is_white:
+                stats["total_wins"] += 1
+                stats["black_wins"] += 1
+                if tournament.event_type and "blitz" in tournament.event_type.lower():
+                    stats["blitz_wins"] += 1
+                elif tournament.event_type and "rapid" in tournament.event_type.lower():
+                    stats["rapid_wins"] += 1
+            else:
+                stats["total_losses"] += 1
+                stats["white_losses"] += 1
         elif match.result == "1/2-1/2":
             stats["total_draws"] += 1
+            if is_white:
+                stats["white_draws"] += 1
+            else:
+                stats["black_draws"] += 1
 
         # Check total games per type
         if tournament.event_type and "standard" in tournament.event_type.lower():
             stats["classical_games"] += 1
+
+    stats["win_rate"] = int((stats["total_wins"] / stats["total_matches"]) * 100) if stats["total_matches"] > 0 else 0
+    stats["current_rating"] = current_user.fide_rating or 0
 
     unlocked_achievement_ids = []
 
