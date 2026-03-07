@@ -102,6 +102,74 @@ async def update_my_profile(
     }
 
 
+@router.get("/me/achievements")
+async def get_my_achievements(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Aggregate match stats and return unlocked achievement titles"""
+    from sqlalchemy import or_, and_
+    
+    # Fetch all matches for this user
+    matches = db.query(models.Match, models.Tournament).join(
+        models.Tournament, models.Match.tournament_id == models.Tournament.tournament_id
+    ).filter(
+        or_(
+            models.Match.white_player_id == current_user.user_id,
+            models.Match.black_player_id == current_user.user_id
+        )
+    ).all()
+
+    stats = {
+        "blitz_wins": 0,
+        "rapid_wins": 0,
+        "total_wins": 0,
+        "total_draws": 0,
+        "classical_games": 0,
+    }
+
+    for match, tournament in matches:
+        is_white = match.white_player_id == current_user.user_id
+        
+        # Check result
+        if (is_white and match.result == "1-0") or (not is_white and match.result == "0-1"):
+            stats["total_wins"] += 1
+            if tournament.event_type and "blitz" in tournament.event_type.lower():
+                stats["blitz_wins"] += 1
+            elif tournament.event_type and "rapid" in tournament.event_type.lower():
+                stats["rapid_wins"] += 1
+        elif match.result == "1/2-1/2":
+            stats["total_draws"] += 1
+
+        # Check total games per type
+        if tournament.event_type and "standard" in tournament.event_type.lower():
+            stats["classical_games"] += 1
+
+    unlocked_achievement_ids = []
+
+    if stats["blitz_wins"] >= 10:
+        unlocked_achievement_ids.append("Blitz King")
+    if stats["rapid_wins"] >= 10:  # Simplified from "win tournament" to 10 wins
+        unlocked_achievement_ids.append("Rapid Master")
+    if stats["total_wins"] >= 5:   # Simplified for Streak Master
+        unlocked_achievement_ids.append("Streak Master")
+    if stats["total_wins"] >= 20:  # Simplified for Endgame Specialist
+        unlocked_achievement_ids.append("Endgame Specialist")
+    if stats["classical_games"] >= 50:
+        unlocked_achievement_ids.append("Classical Specialist")
+    if stats["total_wins"] >= 30:  # Simplified for Tournament Champion
+        unlocked_achievement_ids.append("Tournament Champion")
+    if stats["total_draws"] >= 10:
+        unlocked_achievement_ids.append("Iron Draw")
+    if current_user.fide_rating and current_user.fide_rating > 1500:
+        unlocked_achievement_ids.append("Rating Climber")
+
+    return {
+        "unlocked": unlocked_achievement_ids,
+        "stats": stats
+    }
+
+
 @router.get("/arbiters")
 async def get_all_arbiters(
     db: Session = Depends(get_db),
