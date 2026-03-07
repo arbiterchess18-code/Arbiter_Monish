@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, MapPin, Trophy, Briefcase, Star } from "lucide-react";
 import { motion } from "framer-motion";
-import axios from "axios";
+import { apiFetch } from "@/lib/api";
 
 const ArbitersPage = () => {
   const navigate = useNavigate();
@@ -22,16 +22,10 @@ const ArbitersPage = () => {
   const fetchArbiters = async () => {
     try {
       setLoading(true);
-      const token = sessionStorage.getItem("authToken");
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/users/arbiters`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      setArbiters(response.data);
+      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/arbiters`);
+      if (!response.ok) throw new Error("Network response was not ok");
+      const data = await response.json();
+      setArbiters(data);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch arbiters:", err);

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { apiFetch } from "@/lib/api";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination, EffectFade } from "swiper/modules";
 
@@ -48,7 +49,7 @@ const Signup = () => {
         role,
       };
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${import.meta.env.VITE_API_URL}/signup?role=${role}`,
         {
           method: "POST",
@@ -70,7 +71,7 @@ const Signup = () => {
       loginBody.append("username", data.email);
       loginBody.append("password", data.password);
 
-      const loginResponse = await fetch(
+      const loginResponse = await apiFetch(
         `${import.meta.env.VITE_API_URL}/token`,
         {
           method: "POST",
@@ -84,7 +85,6 @@ const Signup = () => {
       if (loginResponse.ok) {
         const loginData = await loginResponse.json();
         sessionStorage.setItem("userData", JSON.stringify(loginData.userData));
-        sessionStorage.setItem("authToken", loginData.access_token);
         window.dispatchEvent(new Event("authChange"));
 
         // Redirect based on role

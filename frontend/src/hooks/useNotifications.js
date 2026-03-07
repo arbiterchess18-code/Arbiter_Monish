@@ -12,16 +12,9 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-function getAuthHeaders() {
-    const token = sessionStorage.getItem("authToken");
-    return {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-}
 
 /** Read current user_id from sessionStorage (BIGINT stored as number/string) */
 function getCurrentUserId() {
@@ -43,9 +36,7 @@ export function useNotifications() {
     const fetchNotifications = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/notifications`, {
-                headers: getAuthHeaders(),
-            });
+            const res = await apiFetch(`${API_URL}/notifications`);
             if (!res.ok) return;
             const data = await res.json();
             setNotifications(data);
@@ -136,9 +127,9 @@ export function useNotifications() {
     // ── Mark a single notification as read (optimistic)
     const markRead = useCallback(async (notificationId) => {
         try {
-            const res = await fetch(
+            const res = await apiFetch(
                 `${API_URL}/notifications/${notificationId}/read`,
-                { method: "PATCH", headers: getAuthHeaders() }
+                { method: "PATCH" }
             );
             if (!res.ok) return;
             setNotifications((prev) =>
@@ -155,9 +146,8 @@ export function useNotifications() {
     // ── Mark ALL as read
     const markAllRead = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/notifications/read-all`, {
+            const res = await apiFetch(`${API_URL}/notifications/read-all`, {
                 method: "PATCH",
-                headers: getAuthHeaders(),
             });
             if (!res.ok) return;
             setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));

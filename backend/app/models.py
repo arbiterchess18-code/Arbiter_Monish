@@ -59,6 +59,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     tournaments_conducted = Column(Integer, default=0)
     availability = Column(String(255), default="Year-round")
+    profile_picture_url = Column(Text, nullable=True)
 
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(

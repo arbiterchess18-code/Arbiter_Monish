@@ -18,6 +18,7 @@ class UserProfileUpdate(BaseModel):
     national_rating: Optional[int] = None
     country: Optional[str] = None
     bio: Optional[str] = None
+    profile_picture_url: Optional[str] = None
 
 
 @router.get("/me")
@@ -45,6 +46,7 @@ async def get_my_profile(
         "country": current_user.country or "India",
         "role": primary_role,
         "is_active": current_user.is_active,
+        "profile_picture_url": current_user.profile_picture_url,
         "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
     }
 
@@ -77,6 +79,8 @@ async def update_my_profile(
         current_user.national_rating = profile_update.national_rating
     if profile_update.country is not None:
         current_user.country = profile_update.country
+    if profile_update.profile_picture_url is not None:
+        current_user.profile_picture_url = profile_update.profile_picture_url
 
     db.commit()
     db.refresh(current_user)
@@ -93,6 +97,7 @@ async def update_my_profile(
         "fide_rating": current_user.fide_rating or 0,
         "national_rating": current_user.national_rating or 0,
         "country": current_user.country or "India",
+        "profile_picture_url": current_user.profile_picture_url,
         "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
     }
 
@@ -133,6 +138,7 @@ async def get_all_arbiters(
             "tournaments_conducted": member.tournaments_conducted or 0,
             "is_verified": member.is_verified or False,
             "bio": member.bio or "",
+            "profile_picture_url": member.profile_picture_url,
         })
 
     return result
@@ -173,5 +179,6 @@ async def get_user_details(
         "specializations": user.specializations or [],
         "availability": user.availability or "Year-round",
         "roles": roles,
+        "profile_picture_url": user.profile_picture_url,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }

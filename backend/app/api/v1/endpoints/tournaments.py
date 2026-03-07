@@ -36,13 +36,33 @@ async def create_tournament(
         raise HTTPException(
             status_code=400, detail=f"Failed to create tournament: {error_msg}")
 
+from typing import List, Optional
+
 @router.get("/public", response_model=List[TournamentResponse])
-async def get_public_tournaments(db: Session = Depends(get_db)):
+async def get_public_tournaments(
+    search: Optional[str] = None,
+    type: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """Players can see all non-private tournaments that are published, upcoming, or active"""
-    tournaments = db.query(models.Tournament).filter(
-        models.Tournament.is_private == False,
-        models.Tournament.status.in_(["published", "upcoming", "active"])
-    ).order_by(models.Tournament.start_date.asc()).all()
+    query = db.query(models.Tournament).filter(models.Tournament.is_private == False)
+    
+    if status and status != "all":
+        query = query.filter(models.Tournament.status == status)
+    else:
+        query = query.filter(models.Tournament.status.in_(["published", "upcoming", "active", "completed"]))
+        
+    if search:
+        query = query.filter(models.Tournament.tournament_name.ilike(f"%{search}%"))
+        
+    if type and type != "all":
+        query = query.filter(
+            (models.Tournament.pairing_system == type) | 
+            (models.Tournament.event_type == type)
+        )
+        
+    tournaments = query.order_by(models.Tournament.start_date.asc()).all()
     for t in tournaments:
         t.registered_count = db.query(models.TournamentRegistration).filter(
             models.TournamentRegistration.tournament_id == t.tournament_id,

@@ -120,9 +120,10 @@ export default function ProfilePage() {
             first_name: data.first_name || "",
             last_name: data.last_name || "",
             fide_id: data.fide_id || "",
-            rating: data.fide_rating || 0,
-            national_rating: data.national_rating || 0,
+            rating: data.fide_rating || "—",
+            national_rating: data.national_rating || "—",
             country: data.country || "India",
+            profile_picture_url: data.profile_picture_url || null,
             updated_at: data.updated_at,
           };
           setProfile(mapped);
@@ -147,6 +148,7 @@ export default function ProfilePage() {
         fide_rating: parseInt(draftProfile.rating) || 0,
         national_rating: parseInt(draftProfile.national_rating) || 0,
         country: draftProfile.country,
+        profile_picture_url: draftProfile.profile_picture_url
       });
       // Merge the API response back into profile
       const updated = {
@@ -157,10 +159,21 @@ export default function ProfilePage() {
         fide_id: result.fide_id,
         rating: result.fide_rating,
         national_rating: result.national_rating,
+        profile_picture_url: result.profile_picture_url,
         updated_at: result.updated_at,
       };
       setProfile(updated);
       setDraftProfile(updated);
+
+      // Sync specific fields to session storage so navbar updates immediately
+      const savedUserData = sessionStorage.getItem("userData");
+      if (savedUserData) {
+        const parsedData = JSON.parse(savedUserData);
+        parsedData.profile_picture_url = result.profile_picture_url;
+        parsedData.firstName = result.first_name || result.name?.split(" ")[0] || parsedData.firstName;
+        sessionStorage.setItem("userData", JSON.stringify(parsedData));
+      }
+
       setEditing(false);
       toast.success("Profile saved successfully!");
     } catch (err) {
@@ -176,12 +189,56 @@ export default function ProfilePage() {
     setEditing(false);
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Immediate preview
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-    setDraftProfile((p) => ({ ...p, profile_picture_url: url }));
+
+    // Initial loading state can be added here if needed
+    const loadingToast = toast.loading("Uploading image...");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", "chess_arena_unsigned");
+
+      const res = await fetch("https://api.cloudinary.com/v1_1/dwpow6jer/image/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Cloudinary upload failed");
+
+      const data = await res.json();
+      const secureUrl = data.secure_url;
+
+      // 1. Instantly save exclusively this field to the backend
+      await updateUserProfile({
+        profile_picture_url: secureUrl
+      });
+
+      // 2. Update local state
+      setProfile((p) => ({ ...p, profile_picture_url: secureUrl }));
+      setDraftProfile((p) => ({ ...p, profile_picture_url: secureUrl }));
+
+      // 3. Update session storage for global UI sync
+      const savedUserData = sessionStorage.getItem("userData");
+      if (savedUserData) {
+        const parsedData = JSON.parse(savedUserData);
+        parsedData.profile_picture_url = secureUrl;
+        sessionStorage.setItem("userData", JSON.stringify(parsedData));
+      }
+
+      setPreviewUrl(null); // Clear preview so we use the confirmed URL
+
+      toast.success("Profile image updated successfully!", { id: loadingToast });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to upload image. Please try again.", { id: loadingToast });
+    }
   };
 
   const togglePref = (pref) => {
@@ -304,7 +361,6 @@ export default function ProfilePage() {
                         <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{profile.country}</span>
                       )}
                       <span>FIDE: {profile.fide_id || "—"}</span>
-                      <span>ACF: {profile.acf_id || "—"}</span>
                     </div>
 
                     {/* Playing preferences as pills */}
