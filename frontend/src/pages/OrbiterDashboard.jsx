@@ -32,27 +32,9 @@ export default function OrbiterDashboard() {
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
           <h2 className="font-display font-semibold text-lg">Organizer Requests</h2>
           <div className="space-y-3">
-            {mockOrganizerRequests.map(req => (
-              <div key={req.id} className="stat-card space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-medium text-sm">{req.name}</p>
-                    <p className="text-xs text-muted-foreground">{req.tournament}</p>
-                  </div>
-                  <Badge variant="outline" className="bg-warning/15 text-warning-foreground border-warning/30 text-[10px]">
-                    Pending
-                  </Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="default" className="flex-1 h-8 text-xs">
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs">
-                    <AlertCircle className="h-3 w-3 mr-1" /> Reject
-                  </Button>
-                </div>
-              </div>
-            ))}
+            <div className="p-8 text-center border border-dashed rounded-xl border-border bg-muted/20">
+              <p className="text-sm text-muted-foreground">No pending organizer requests.</p>
+            </div>
           </div>
         </motion.div>
       </div>

@@ -2,6 +2,16 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 
+class TournamentStaffBase(BaseModel):
+    staff_id: Optional[int] = None
+    user_id: int
+    role_title: str
+    fide_id: Optional[str] = None
+    assigned_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
 class TournamentBase(BaseModel):
     tournament_name: str
     description: Optional[str] = None
@@ -31,6 +41,7 @@ class TournamentBase(BaseModel):
     aicf_id: Optional[str] = None
     is_private: bool = False
     tie_break_config: List[str] = ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Direct Encounter", "Number of Wins"]
+    sub_arbiters: List[Dict[str, Any]] = []
 
     @field_validator("tournament_name", "venue_name", "organizer_name", "contact_person", mode="before")
     @classmethod
@@ -184,20 +195,25 @@ class TournamentUpdate(BaseModel):
     is_private: Optional[bool] = None
     status: Optional[str] = None
     tie_break_config: Optional[List[str]] = None
+    sub_arbiters: Optional[List[Dict[str, Any]]] = None
 
 class TournamentResponse(TournamentBase):
     tournament_id: int
+    created_by: int
     status: str
-    current_round: int = 0
     created_at: datetime
-    created_by: Optional[int] = None
-    registered_count: int = 0
+    updated_at: datetime
+    registered_count: Optional[int] = 0
+    staff: List[TournamentStaffBase] = []
 
     class Config:
         from_attributes = True
-
-class TournamentViewDetailsResponse(BaseModel):
-    tournament: TournamentResponse
+        
+class TournamentViewDetailsResponse(TournamentResponse):
+    rounds_list: List[dict] = []
     stats: Dict[str, Any]
     tie_breaker_rules: List[str]
     available_tabs: List[str]
+    
+    class Config:
+        from_attributes = True

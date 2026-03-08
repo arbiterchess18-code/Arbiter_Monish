@@ -40,6 +40,9 @@ export default function TournamentPairings() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
+  const currentUser = JSON.parse(sessionStorage.getItem("userData") || "{}");
+  const currentUserId = currentUser.user_id || currentUser.id;
+
   useEffect(() => {
     loadTournamentData();
   }, [id]);
@@ -141,6 +144,11 @@ export default function TournamentPairings() {
 
   if (!tournament) return null;
 
+  const isMainArbiter = tournament.created_by == currentUserId;
+  const isSubArbiter = (tournament.staff || []).some(
+    sa => typeof sa === 'object' ? sa.user_id == currentUserId : sa == currentUserId
+  );
+
   const canGeneratePairings = currentRound <= tournament.rounds;
   const hasUnsavedPairings = pairings.length > 0;
 
@@ -176,7 +184,7 @@ export default function TournamentPairings() {
             </div>
 
             <div className="flex gap-2">
-              {!hasUnsavedPairings && canGeneratePairings && (
+              {isMainArbiter && !hasUnsavedPairings && canGeneratePairings && (
                 <Button
                   onClick={handleGeneratePairings}
                   disabled={generating}
@@ -196,7 +204,7 @@ export default function TournamentPairings() {
                 </Button>
               )}
 
-              {hasUnsavedPairings && (
+              {isMainArbiter && hasUnsavedPairings && (
                 <Button
                   onClick={handleSubmitResults}
                   size="lg"
@@ -231,7 +239,7 @@ export default function TournamentPairings() {
                     <TableHead className="text-center">vs</TableHead>
                     <TableHead>Black</TableHead>
                     <TableHead>Rating</TableHead>
-                    <TableHead className="w-40">Result</TableHead>
+                    {isMainArbiter && <TableHead className="w-40">Result</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -271,33 +279,35 @@ export default function TournamentPairings() {
                         )}
                       </TableCell>
                       <TableCell>{pairing.black?.rating || "-"}</TableCell>
-                      <TableCell>
-                        {pairing.black ? (
-                          <Select
-                            value={results[index] || ""}
-                            onValueChange={(value) =>
-                              handleResultChange(index, value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select result" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="1-0">
-                                1-0 (White wins)
-                              </SelectItem>
-                              <SelectItem value="0-1">
-                                0-1 (Black wins)
-                              </SelectItem>
-                              <SelectItem value="½-½">½-½ (Draw)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            1-0 (Bye)
-                          </div>
-                        )}
-                      </TableCell>
+                      {isMainArbiter && (
+                        <TableCell>
+                          {pairing.black ? (
+                            <Select
+                              value={results[index] || ""}
+                              onValueChange={(value) =>
+                                handleResultChange(index, value)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select result" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1-0">
+                                  1-0 (White wins)
+                                </SelectItem>
+                                <SelectItem value="0-1">
+                                  0-1 (Black wins)
+                                </SelectItem>
+                                <SelectItem value="½-½">½-½ (Draw)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">
+                              1-0 (Bye)
+                            </div>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -328,26 +338,28 @@ export default function TournamentPairings() {
                     Ready to Generate Round {currentRound}
                   </div>
                   <div className="text-sm text-muted-foreground mb-6">
-                    Generate Swiss pairings for this round to get started.
+                    {isMainArbiter ? "Generate Swiss pairings for this round to get started." : "Waiting for the Main Arbiter to generate pairings."}
                   </div>
-                  <Button
-                    onClick={handleGeneratePairings}
-                    disabled={generating}
-                    size="lg"
-                    className="bg-chess-gold hover:bg-chess-gold/90 text-black font-bold shadow-md border-none"
-                  >
-                    {generating ? (
-                      <>
-                        <div className="h-4 w-4 animate-spin border-2 border-black border-t-transparent rounded-full mr-2" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Generate Round {currentRound} Pairings
-                      </>
-                    )}
-                  </Button>
+                  {isMainArbiter && (
+                    <Button
+                      onClick={handleGeneratePairings}
+                      disabled={generating}
+                      size="lg"
+                      className="bg-chess-gold hover:bg-chess-gold/90 text-black font-bold shadow-md border-none"
+                    >
+                      {generating ? (
+                        <>
+                          <div className="h-4 w-4 animate-spin border-2 border-black border-t-transparent rounded-full mr-2" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Generate Round {currentRound} Pairings
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </>
               )}
             </div>

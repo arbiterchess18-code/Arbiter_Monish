@@ -4,7 +4,10 @@ from typing import List
 
 from .... import models
 from ....database import get_db
-from ....core.security import get_current_user, check_role, get_user_roles, has_privileged_role
+from ....core.security import (
+    get_current_user, check_role, get_user_roles, 
+    has_privileged_role, is_tournament_staff_or_admin
+)
 from ....schemas.tournament import (
     TournamentCreate, TournamentUpdate, TournamentResponse, TournamentViewDetailsResponse
 )
@@ -19,12 +22,28 @@ async def create_tournament(
         check_role(["SUPER_ADMIN", "ADMIN", "ARBITER"]))
 ):
     try:
+        data = tournament.model_dump()
+        sub_arbiters_data = data.pop("sub_arbiters", [])
+        
         new_tournament = models.Tournament(
-            **tournament.model_dump(),
+            **data,
             created_by=current_user.user_id,
             status="upcoming"
         )
         db.add(new_tournament)
+        db.flush()
+        
+        # Add sub arbiters to the relational table
+        for staff_member in sub_arbiters_data:
+            if staff_member.get('user_id'):
+                new_staff = models.TournamentStaff(
+                    tournament_id=new_tournament.tournament_id,
+                    user_id=int(staff_member.get('user_id')),
+                    role_title=staff_member.get('position', 'Sub-Arbiter'),
+                    fide_id=staff_member.get('fide_id', '')
+                )
+                db.add(new_staff)
+
         db.commit()
         db.refresh(new_tournament)
         return new_tournament
@@ -82,18 +101,37 @@ async def list_tournaments(db: Session = Depends(get_db)):
 
 @router.get("/arbiter", response_model=List[TournamentResponse])
 async def list_arbiter_tournaments(
+    role: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Get tournaments created by the current arbiter"""
-    tournaments = db.query(models.Tournament).filter(
-        models.Tournament.created_by == current_user.user_id
-    ).all()
+    """Get tournaments created by the current arbiter or where they are a sub-arbiter"""
+    from sqlalchemy import or_
+    
+    uid = current_user.user_id
+    
+    query = db.query(models.Tournament).options(joinedload(models.Tournament.staff))
+    
+    if role == "sub_arbiter":
+        query = query.join(models.TournamentStaff).filter(
+            models.TournamentStaff.user_id == uid
+        ).distinct()
+    else:
+        query = query.outerjoin(models.TournamentStaff).filter(
+            or_(
+                models.Tournament.created_by == uid,
+                models.TournamentStaff.user_id == uid
+            )
+        ).distinct()
+        
+    tournaments = query.all()
+    
     for t in tournaments:
         t.registered_count = db.query(models.TournamentRegistration).filter(
             models.TournamentRegistration.tournament_id == t.tournament_id,
             models.TournamentRegistration.status.in_(["approved", "active"])
         ).count()
+            
     return tournaments
 
 @router.get("/stats/overview")
@@ -303,10 +341,7 @@ async def get_tournament_view_details(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    roles = get_user_roles(current_user)
-    is_creator = tournament.created_by == current_user.user_id
-    can_manage = is_creator or has_privileged_role(
-        current_user) or "ARBITER" in roles
+    can_manage = is_tournament_staff_or_admin(tournament, current_user)
 
     approved_count = db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id,

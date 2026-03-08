@@ -128,6 +128,22 @@ class Tournament(Base):
     def tie_break_config(self, value):
         self.tie_break_config_json = json.dumps(value)
 
+    sub_arbiters_json = Column("sub_arbiters", Text, default='[]')
+    
+    @property
+    def sub_arbiters(self):
+        if not self.sub_arbiters_json:
+            return []
+        return json.loads(self.sub_arbiters_json)
+
+    @sub_arbiters.setter
+    def sub_arbiters(self, value):
+        self.sub_arbiters_json = json.dumps(value)
+
+    # Note: New relational mapping for Sub-Arbiters
+    staff = relationship(
+        "TournamentStaff", back_populates="tournament", cascade="all, delete-orphan")
+
     # upcoming, active, completed
     status = Column(String(30), default="upcoming")
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -144,6 +160,21 @@ class Tournament(Base):
         "Match", back_populates="tournament", cascade="all, delete-orphan")
     registration_form_fields = relationship(
         "RegistrationFormField", back_populates="tournament", cascade="all, delete-orphan")
+
+
+class TournamentStaff(Base):
+    __tablename__ = "tournament_staff"
+    staff_id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey(
+        "tournaments.tournament_id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey(
+        "users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    role_title = Column(String(50), nullable=False)
+    fide_id = Column(String(50))
+    assigned_at = Column(TIMESTAMP, server_default=func.now())
+
+    tournament = relationship("Tournament", back_populates="staff")
+    user = relationship("User")
 
 
 class Round(Base):

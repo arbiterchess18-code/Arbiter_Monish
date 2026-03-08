@@ -3,7 +3,7 @@ import { StatCard } from "@/components/StatCard";
 import { Swords, Trophy, Target, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { motion } from "framer-motion";
-import axios from "axios";
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 
 const COLORS = ["hsl(var(--success))", "hsl(var(--primary))", "hsl(var(--warning))"];
@@ -27,16 +27,14 @@ export default function OrbiterStats() {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const token = sessionStorage.getItem("authToken");
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/tournaments/stats/overview`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const response = await apiFetch(
+        `${import.meta.env.VITE_API_URL}/tournaments/stats/overview`
       );
-      setStats(response.data);
+
+      if (!response.ok) throw new Error("Failed to fetch statistics");
+
+      const data = await response.json();
+      setStats(data);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch statistics:", err);
@@ -100,12 +98,12 @@ export default function OrbiterStats() {
           <h2 className="font-display font-semibold text-lg mb-4">Result Distribution</h2>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie 
-                data={stats.matchResults && stats.matchResults.length > 0 ? stats.matchResults : [{ result: "No matches", count: 0 }]} 
-                innerRadius={60} 
-                outerRadius={90} 
-                paddingAngle={3} 
-                dataKey="count" 
+              <Pie
+                data={stats.matchResults && stats.matchResults.length > 0 ? stats.matchResults : [{ result: "No matches", count: 0 }]}
+                innerRadius={60}
+                outerRadius={90}
+                paddingAngle={3}
+                dataKey="count"
                 label={({ result, percent }) => `${result} ${(percent * 100).toFixed(0)}%`}
               >
                 {(stats.matchResults || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

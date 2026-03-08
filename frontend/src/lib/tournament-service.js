@@ -61,6 +61,23 @@ export const updateUserProfile = async (profileData) => {
 };
 
 /**
+ * Get all users with ARBITER role to assign as sub-arbiters
+ */
+export const getArbiters = async () => {
+  try {
+    const response = await fetch(`${API_URL}/users/arbiters`, {
+      headers: getAuthHeaders(),
+    });
+    await handleResponse(response);
+    if (!response.ok) throw new Error("Failed to fetch arbiters");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching arbiters:", error);
+    return [];
+  }
+};
+
+/**
  * Get all tournaments from Backend
  */
 export const getTournaments = async () => {
@@ -80,9 +97,10 @@ export const getTournaments = async () => {
 /**
  * Get tournaments created by the current arbiter
  */
-export const getArbiterTournaments = async () => {
+export const getArbiterTournaments = async (role = null) => {
   try {
-    const response = await fetch(`${API_URL}/tournaments/arbiter`, {
+    const url = role ? `${API_URL}/tournaments/arbiter?role=${role}` : `${API_URL}/tournaments/arbiter`;
+    const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
     await handleResponse(response);

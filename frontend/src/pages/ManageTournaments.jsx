@@ -22,6 +22,7 @@ import {
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ManageTournaments() {
   const navigate = useNavigate();
@@ -30,34 +31,45 @@ export default function ManageTournaments() {
   const [actionType, setActionType] = useState(null); // 'end', 'delete'
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterMode, setFilterMode] = useState("all");
 
-  // Fetch tournaments created by this arbiter
+  const currentUser = JSON.parse(sessionStorage.getItem("userData") || "{}");
+  const userId = currentUser.user_id || currentUser.id;
+
+  // Fetch tournaments created by this arbiter and assigned to this arbiter
   const fetchTournaments = async () => {
     setLoading(true);
     try {
       const data = await getArbiterTournaments();
       // Map backend data to frontend format
-      const mappedTournaments = data.map((t) => ({
-        id: t.tournament_id,
-        name: t.tournament_name,
-        date: t.start_date,
-        endDate: t.end_date,
-        location: `${t.venue_name}, ${t.city}`,
-        venueName: t.venue_name,
-        city: t.city,
-        state: t.state,
-        country: t.country,
-        players: t.registered_count || 0,
-        maxPlayers: t.max_players || 0,
-        rounds: t.rounds || 0,
-        status: t.status || "upcoming",
-        isPublished: t.isPublished || t.status === "published",
-        registrationType: t.registration_type || "Free",
-        isRated: t.is_rated,
-        eventType: t.event_type || "Rapid",
-        timeControl: t.time_control,
-        pairingSystem: t.pairing_system,
-      }));
+      const mappedTournaments = data.map((t) => {
+        // Relational mapping from tournament_staff
+        let parsedSubArbiters = t.staff || [];
+
+        return {
+          id: t.tournament_id,
+          name: t.tournament_name,
+          date: t.start_date,
+          endDate: t.end_date,
+          location: `${t.venue_name}, ${t.city}`,
+          venueName: t.venue_name,
+          city: t.city,
+          state: t.state,
+          country: t.country,
+          players: t.registered_count || 0,
+          maxPlayers: t.max_players || 0,
+          rounds: t.rounds || 0,
+          status: t.status || "upcoming",
+          isPublished: t.isPublished || t.status === "published",
+          registrationType: t.registration_type || "Free",
+          isRated: t.is_rated,
+          eventType: t.event_type || "Rapid",
+          timeControl: t.time_control,
+          pairingSystem: t.pairing_system,
+          createdBy: t.created_by,
+          subArbiters: parsedSubArbiters,
+        };
+      });
       setTournaments(mappedTournaments);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
@@ -72,6 +84,11 @@ export default function ManageTournaments() {
       fetchTournaments();
     }
   }, [role]);
+
+  // Compute whether the current user is a sub-arbiter on each tournament
+  const isSubArbiterOnTournament = (t) =>
+    !(t.createdBy?.toString() === userId?.toString()) &&
+    t.subArbiters.some(sa => sa?.user_id?.toString() === userId?.toString());
 
   if (role !== "arbiter" && role !== "admin" && role !== "organization") {
     return (
@@ -141,17 +158,25 @@ export default function ManageTournaments() {
         title="Manage Tournaments"
         description="Monitor and control all your tournaments"
         action={
-          <Button onClick={() => navigate("/orbiter/create")}>
-            <PlusCircle className="h-4 w-4 mr-1.5" /> New Tournament
-          </Button>
+          <div className="flex items-center gap-3">
+            <Select value={filterMode} onValueChange={setFilterMode}>
+              <SelectTrigger className="w-[200px] h-9 bg-background">
+                <SelectValue placeholder="Filter..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tournaments</SelectItem>
+                <SelectItem value="ongoing">Ongoing</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="finished">Finished</SelectItem>
+                <SelectItem value="sub_arbiter">Appointed as Sub-Arbiter</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => navigate("/orbiter/create")}>
+              <PlusCircle className="h-4 w-4 mr-1.5" /> New Tournament
+            </Button>
+          </div>
         }
       />
-
-      <div>
-        <h2 className="text-xl font-semibold mb-4 text-foreground/90 pb-2 border-b">
-          Your Tournaments
-        </h2>
-      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -167,8 +192,15 @@ export default function ManageTournaments() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-          {tournaments.map((t, i) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {tournaments.filter(t => {
+            if (filterMode === "all") return true;
+            if (filterMode === "ongoing") return t.status === "active";
+            if (filterMode === "upcoming") return t.status === "upcoming" || t.status === "published";
+            if (filterMode === "finished") return t.status === "completed";
+            if (filterMode === "sub_arbiter") return t.subArbiters.some(sa => sa?.user_id?.toString() === userId?.toString());
+            return true;
+          }).map((t, i) => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const startDate = new Date(t.date);
@@ -177,81 +209,87 @@ export default function ManageTournaments() {
               t.status === "published" && today >= startDate;
             const cannotDelete = t.status === "active";
 
+            const isCreator = t.createdBy?.toString() === userId?.toString();
+            const isSubArbiterCard = isSubArbiterOnTournament(t);
+
             return (
-              <div
+              <TournamentCard
                 key={t.id}
-                className="relative flex flex-col h-full bg-card border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex-1">
-                  <TournamentCard tournament={t} index={i} hideActions={true} />
-                </div>
+                tournament={t}
+                isSubArbiter={isSubArbiterCard}
+                index={i}
+                hideActions={true}
+                customActions={
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs font-medium px-0"
+                      onClick={() => navigate(`/tournament/${t.id}`)}
+                      title="View tournament details"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" /> View Details
+                    </Button>
 
-                {/* Quick Actions Footer */}
-                <div className="bg-muted/30 border-t p-3 grid grid-cols-4 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs font-medium"
-                    onClick={() => navigate(`/tournament/${t.id}`)}
-                    title="View tournament details"
-                  >
-                    <Eye className="h-3.5 w-3.5 mr-1" /> View Details
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs font-medium"
-                    onClick={() => navigate(`/orbiter/create?edit=${t.id}`)}
-                    title="Edit tournament"
-                  >
-                    <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
-                  </Button>
-
-                  <Button
-                    variant={t.status === "published" ? "default" : "outline"}
-                    size="sm"
-                    className={`w-full text-xs font-medium ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
-                    onClick={() => togglePublish(t)}
-                    disabled={cannotUnpublish}
-                    title={
-                      cannotUnpublish
-                        ? "Cannot unpublish once the start date has arrived"
-                        : t.status === "published"
-                          ? "Unpublish tournament"
-                          : "Publish tournament"
-                    }
-                  >
-                    {t.status === "published" ? (
+                    {!isSubArbiterCard && (
                       <>
-                        <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="h-3.5 w-3.5 mr-1" /> Publish
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs font-medium px-0"
+                          onClick={() => navigate(`/orbiter/create?edit=${t.id}`)}
+                          title="Edit tournament"
+                        >
+                          <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                        </Button>
+
+                        <Button
+                          variant={t.status === "published" ? "default" : "outline"}
+                          size="sm"
+                          className={`w-full text-xs font-medium px-0 ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                          onClick={() => togglePublish(t)}
+                          disabled={cannotUnpublish}
+                          title={
+                            cannotUnpublish
+                              ? "Cannot unpublish once the start date has arrived"
+                              : t.status === "published"
+                                ? "Unpublish tournament"
+                                : "Publish tournament"
+                          }
+                        >
+                          {t.status === "published" ? (
+                            <>
+                              <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="h-3.5 w-3.5 mr-1" /> Publish
+                            </>
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs font-medium px-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+                          onClick={() => {
+                            setActionTournament(t.id);
+                            setActionType("delete");
+                          }}
+                          disabled={cannotDelete}
+                          title={
+                            cannotDelete
+                              ? "Cannot delete an ongoing tournament"
+                              : "Delete tournament"
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                        </Button>
                       </>
                     )}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10"
-                    onClick={() => {
-                      setActionTournament(t.id);
-                      setActionType("delete");
-                    }}
-                    disabled={cannotDelete}
-                    title={
-                      cannotDelete
-                        ? "Cannot delete an ongoing tournament"
-                        : "Delete tournament"
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                  </Button>
-                </div>
-              </div>
+                  </>
+                }
+              />
             );
           })}
         </div>

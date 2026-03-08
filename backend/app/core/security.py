@@ -92,3 +92,16 @@ def get_user_roles(user: models.User) -> set:
 
 def is_tournament_creator_or_admin(tournament: models.Tournament, user: models.User) -> bool:
     return tournament.created_by == user.user_id or has_privileged_role(user)
+
+def is_tournament_staff_or_admin(tournament: models.Tournament, user: models.User) -> bool:
+    if is_tournament_creator_or_admin(tournament, user):
+        return True
+        
+    try:
+        # Lazy-load the staff relationship if available and check for assignment
+        if any(staff.user_id == user.user_id for staff in tournament.staff):
+            return True
+    except Exception:
+        pass
+        
+    return False

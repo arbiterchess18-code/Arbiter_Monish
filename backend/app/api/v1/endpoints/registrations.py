@@ -5,7 +5,7 @@ import json
 
 from .... import models
 from ....database import get_db
-from ....core.security import get_current_user, is_tournament_creator_or_admin, check_role, has_privileged_role, get_password_hash
+from ....core.security import get_current_user, is_tournament_creator_or_admin, is_tournament_staff_or_admin, check_role, has_privileged_role, get_password_hash
 from ....schemas.registration import (
     TournamentRegistrationCreate, TournamentRegistrationResponse, 
     TournamentRegistrationStatusUpdate, RegistrationFormFieldCreate, RegistrationFormFieldResponse
@@ -40,8 +40,8 @@ async def register_for_tournament(
                 status_code=400, detail="Tournament registration is full")
 
     if registration_data.is_manual:
-        if not is_tournament_creator_or_admin(tournament, current_user):
-            raise HTTPException(status_code=403, detail="Only tournament creator or admin can register players manually")
+        if not is_tournament_staff_or_admin(tournament, current_user):
+            raise HTTPException(status_code=403, detail="Only tournament staff or admin can register players manually")
         if not registration_data.player_email or not registration_data.player_name:
             raise HTTPException(status_code=400, detail="Player email and name are required for manual registration")
             
@@ -129,7 +129,7 @@ async def get_tournament_registrations(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    is_privileged = is_tournament_creator_or_admin(tournament, current_user)
+    is_privileged = is_tournament_staff_or_admin(tournament, current_user)
 
     # Arbiters/admins see all registrations (including pending)
     # Regular players only see approved/active registrations
@@ -178,9 +178,9 @@ async def update_registration_status(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can manage registrations")
+            status_code=403, detail="Only tournament staff or admin can manage registrations")
 
     # Rule 3: Can only accept registrations after tournament has started
     if status_update.status == "approved" and tournament.status != "active":
