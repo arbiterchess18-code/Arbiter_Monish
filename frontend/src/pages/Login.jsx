@@ -54,6 +54,7 @@ const Login = () => {
 
       const data = await response.json();
 
+      sessionStorage.setItem("token", data.access_token);
       sessionStorage.setItem("userData", JSON.stringify(data.userData));
       window.dispatchEvent(new Event("authChange"));
 

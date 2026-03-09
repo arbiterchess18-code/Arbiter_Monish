@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import {
   seedTournamentPlayers,
   completeTournament,
   regenerateTournamentPairing,
+  getUserProfile,
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
@@ -82,19 +83,11 @@ export default function TournamentDetails() {
   const [selectedRound, setSelectedRound] = useState(1);
   const [tieBreakNames, setTieBreakNames] = useState([]);
   const [roundsInfo, setRoundsInfo] = useState([]);
+  // Authoritative current user fetched from API (not sessionStorage)
+  const [currentUser, setCurrentUser] = useState(null);
 
-  useEffect(() => {
-    loadTournament();
-
-    // Parse tab from query params
-    const params = new URLSearchParams(location.search);
-    const tabParam = params.get("tab");
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [id, location.search]);
-
-  const loadTournament = async () => {
+  // Fix 4: wrap in useCallback so useEffect has a stable dep reference
+  const loadTournament = useCallback(async () => {
     try {
       const data = await getTournamentById(id);
       if (!data) {
@@ -103,7 +96,6 @@ export default function TournamentDetails() {
         return;
       }
 
-      // Map backend fields to frontend expected names
       const mappedData = {
         ...data,
         id: data.tournament_id,
@@ -116,7 +108,6 @@ export default function TournamentDetails() {
         type: data.event_type,
         rated: data.is_rated,
         increment: data.increment,
-        // Ensure registeredPlayers is always an array
         registeredPlayers: data.registeredPlayers || [],
         timeControl: data.time_control,
         entryFee: data.entry_fee,
@@ -125,7 +116,6 @@ export default function TournamentDetails() {
 
       setTournament(mappedData);
 
-      // Initialize selectedRound to current round if not set
       if (data.current_round > 0) {
         setSelectedRound(prev => (prev === 1 ? data.current_round : prev));
       }
@@ -134,16 +124,15 @@ export default function TournamentDetails() {
       setStandings(standingsData?.standings || []);
       setTieBreakNames(standingsData?.tie_break_names || []);
 
-      // Always fetch registrations to be sure
       const registrationsData = await getTournamentRegistrations(id);
       setRegistrations(registrationsData || []);
 
-      // Fetch pairings if arbiter
       try {
         const pairingsData = await getTournamentPairings(id);
         setPairings(pairingsData?.pairings || []);
         setRoundsInfo(pairingsData?.rounds_info || []);
-      } catch (_) {
+      } catch (err) {
+        console.error("PAIRINGS FETCH ERROR (loadTournament):", err);
         setPairings([]);
         setRoundsInfo([]);
       }
@@ -153,7 +142,24 @@ export default function TournamentDetails() {
       toast.error(error.message);
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
+
+  useEffect(() => {
+    // Fetch authoritative current user from API on mount
+    getUserProfile().then(u => {
+      if (u) setCurrentUser(u);
+    });
+
+    loadTournament();
+
+    // Parse tab from query params
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+    // Fix 4: loadTournament is stable via useCallback, safe to include
+  }, [loadTournament, location.search]);
 
   const handleCompleteTournament = async () => {
     try {
@@ -166,12 +172,52 @@ export default function TournamentDetails() {
     }
   };
 
+  const refreshPairingsState = async () => {
+    const [pairingsData, standingsData, tournamentData, registrationsData] =
+      await Promise.all([
+        getTournamentPairings(id),
+        getStandings(id),
+        getTournamentById(id),
+        getTournamentRegistrations(id),
+      ]);
+
+    const newPairings = pairingsData?.pairings || [];
+    const newRoundsInfo = pairingsData?.rounds_info || [];
+
+    setPairings(newPairings);
+    setRoundsInfo(newRoundsInfo);
+    setStandings(standingsData?.standings || []);
+    setTieBreakNames(standingsData?.tie_break_names || []);
+    setRegistrations(registrationsData || []);
+
+    const mapped = {
+      ...tournamentData,
+      id: tournamentData.tournament_id,
+      name: tournamentData.tournament_name,
+      startDate: tournamentData.start_date,
+      endDate: tournamentData.end_date,
+      startTime: tournamentData.start_time,
+      venue: tournamentData.venue_name,
+      city: tournamentData.city,
+      type: tournamentData.event_type,
+      rated: tournamentData.is_rated,
+      increment: tournamentData.increment,
+      registeredPlayers: tournamentData.registeredPlayers || [],
+      timeControl: tournamentData.time_control,
+      entryFee: tournamentData.entry_fee,
+      currentRound: tournamentData.current_round,
+    };
+    setTournament(mapped);
+
+    return { newPairings, newRoundsInfo, tournamentData: mapped };
+  };
+
   const handleStartTournament = async () => {
     try {
       await startTournament(id);
-      toast.success("Tournament started successfully!");
-      loadTournament();
-      setActiveTab("overview");
+      toast.success("Tournament started! Generate Round 1 from the Pairings tab.");
+      await refreshPairingsState();
+      setActiveTab("pairings");
     } catch (error) {
       toast.error(error.message);
     }
@@ -197,7 +243,7 @@ export default function TournamentDetails() {
   };
 
   const handleUpdateResult = async (matchId, result) => {
-    // Optimistically update local pairings
+    // Optimistic update for instant UI feedback
     setPairings((prev) =>
       prev.map((m) => (m.match_id === matchId ? { ...m, result } : m))
     );
@@ -205,28 +251,18 @@ export default function TournamentDetails() {
       await updateMatchResult(id, matchId, result);
       toast.success(`Result saved: ${result}`);
 
-      // Check if this was the last result of the final round
-      const updatedPairings = pairings.map((m) => (m.match_id === matchId ? { ...m, result } : m));
-      const allResultsEntered = updatedPairings.every(p => p.result !== null && p.result !== "");
-      const isFinalRound = tournament?.current_round === tournament?.rounds;
-
-      if (isFinalRound && allResultsEntered) {
-        toast.success("Tournament Finished! Redirecting to Final Standings...", { duration: 4000 });
-        setActiveTab("standings");
+      // Re-fetch standings immediately (pairings stay optimistic to avoid UI flicker)
+      const standingsData = await getStandings(id);
+      if (standingsData?.standings) {
+        setStandings(standingsData.standings);
+        setTieBreakNames(standingsData.tie_break_names || []);
       }
 
-      // Refresh standings after scoring
-      const standingsData = await getStandings(id);
-      setStandings(standingsData?.standings || []);
-      setTieBreakNames(standingsData?.tie_break_names || []);
-
-      // Refresh pairings to ensure we have the latest results for dependency checks
-      const pairingsData = await getTournamentPairings(id);
-      setPairings(pairingsData?.pairings || []);
-      setRoundsInfo(pairingsData?.rounds_info || []);
     } catch (error) {
       toast.error(`Failed to save result: ${error.message}`);
-      loadTournament();
+      // On error, roll back by re-fetching immediately
+      const pairingsData = await getTournamentPairings(id);
+      setPairings(pairingsData?.pairings || []);
     }
   };
 
@@ -235,27 +271,16 @@ export default function TournamentDetails() {
       await finalizeTournamentRound(id, selectedRound);
       toast.success(`Round ${selectedRound} finalized!`);
 
-      // 1. Manually update the local state so the button lights up instantly
-      setRoundsInfo(prev => prev.map(r =>
-        r.round_number === selectedRound ? { ...r, is_submitted: true } : r
-      ));
+      // Optimistically update the roundsInfo right away so they don't have to refresh
+      setRoundsInfo(prev =>
+        prev.map(r => r.round_number === selectedRound ? { ...r, is_submitted: true } : r)
+      );
 
-      // 2. Then refresh everything from the server to stay in sync
-      await loadTournament();
+      // Real atomic refresh — replaces the old Promise.all + loadTournament() pattern
+      const { tournamentData } = await refreshPairingsState();
 
-      // Explicitly refresh standings after finalization
-      const standingsData = await getStandings(id);
-      setStandings(standingsData?.standings || []);
-      setTieBreakNames(standingsData?.tie_break_names || []);
-
-      // Refresh pairings explicitly to ensure we have the fresh data
-      const pairingsData = await getTournamentPairings(id);
-      setPairings(pairingsData?.pairings || []);
-      setRoundsInfo(pairingsData?.rounds_info || []);
-
-      // If this is the final round, automatically redirect to Live Standings
-      if (selectedRound === tournament.rounds) {
-        toast.success("All rounds finished! Checking Final Standings...", { duration: 4000 });
+      if (selectedRound === tournamentData.rounds) {
+        toast.success("All rounds complete! Check Final Standings.", { duration: 4000 });
         setActiveTab("standings");
       }
     } catch (error) {
@@ -267,23 +292,24 @@ export default function TournamentDetails() {
     setGeneratingPairings(true);
     try {
       await startTournamentPairing(id);
-      toast.success(tournament.current_round === 0 ? "Round 1 pairings generated!" : "Next round pairings generated!");
 
-      // 1. Reload tournament data to update currentRound
-      await loadTournament();
+      // Single atomic refresh — no secondary loadTournament() call
+      const { newPairings, tournamentData } = await refreshPairingsState();
 
-      // 2. Explicitly refresh standings
-      const standingsData = await getStandings(id);
-      setStandings(standingsData?.standings || []);
-      setTieBreakNames(standingsData?.tie_break_names || []);
+      // Derive the new round directly from fresh pairings (most reliable source)
+      const nextRound =
+        newPairings.length > 0
+          ? Math.max(...newPairings.map((p) => p.round_number))
+          : tournamentData.current_round;
 
-      // 3. Update the UI to show the newly created round
-      const freshData = await getTournamentById(id);
-      if (freshData && freshData.current_round) {
-        setSelectedRound(freshData.current_round);
-      }
+      // Jump the round selector — this is what clears the old results from the table
+      setSelectedRound(nextRound);
 
-      // 4. Switch to Pairings tab to see the new work
+      toast.success(
+        nextRound === 1
+          ? "Round 1 pairings generated!"
+          : `Round ${nextRound} pairings generated!`
+      );
       setActiveTab("pairings");
     } catch (error) {
       toast.error(error.message || "Failed to generate pairings");
@@ -351,41 +377,22 @@ export default function TournamentDetails() {
 
   if (!tournament) return null;
 
-  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
-  const currentUserId = userData.id || userData.user_id;
+  // Simple: any arbiter sees all action buttons
+  const isArbiter = role === "arbiter";
 
-  // ── Role Determination ───────────────────────────────────────────────────
-  const isCreator =
-    String(tournament.created_by) === String(currentUserId) ||
-    String(tournament.creator_id || "") === String(currentUserId);
-
-  const isSubArbiter =
-    !isCreator &&
-    (tournament.staff || []).some(
-      s => String(s.user_id ?? s) === String(currentUserId)
-    );
-
-  let roleType = "PLAYER";
-  if (isCreator) roleType = "MAIN_ARBITER";
-  else if (isSubArbiter) roleType = "SUB_ARBITER";
-
-  // ── Permission Object ────────────────────────────────────────────────────
   const permissions = {
-    canGeneratePairings: roleType === "MAIN_ARBITER",
-    canUpdateResults: roleType === "MAIN_ARBITER",
-    canFinalizeRound: roleType === "MAIN_ARBITER",
-    canRegeneratePairings: roleType === "MAIN_ARBITER",
-    canCompleteTournament: roleType === "MAIN_ARBITER",
-    canStartTournament: roleType === "MAIN_ARBITER",
-    canManageParticipants: roleType === "MAIN_ARBITER",
-    canDeleteTournament: roleType === "MAIN_ARBITER",
-    canViewPairingsTab: roleType === "MAIN_ARBITER" || roleType === "SUB_ARBITER",
-    canViewParticipants: roleType === "MAIN_ARBITER" || roleType === "SUB_ARBITER",
+    canGeneratePairings: isArbiter,
+    canUpdateResults: isArbiter,
+    canFinalizeRound: isArbiter,
+    canRegeneratePairings: isArbiter,
+    canCompleteTournament: isArbiter,
+    canStartTournament: isArbiter,
+    canManageParticipants: isArbiter,
+    canDeleteTournament: isArbiter,
+    canViewPairingsTab: isArbiter,
+    canViewParticipants: isArbiter,
     canViewStandings: true,
   };
-
-  // Legacy aliases kept for non-permission logic still using them
-  const isArbiter = roleType !== "PLAYER";
 
 
   const approvedRegistrations = registrations.filter(
@@ -395,19 +402,58 @@ export default function TournamentDetails() {
     (r) => r.status === "pending"
   );
 
+  // Fix 3: robust result check — only count known valid results as "played"
+  const isMatchPlayed = (res) => ["1-0", "0-1", "1/2-1/2"].includes(res);
+
   const filteredPairings = pairings.filter(p => p.round_number === selectedRound);
-  const incompleteMatches = filteredPairings.filter(p => !p.result).length;
-  const allResultsEntered = pairings.length > 0 && pairings.every(p => !!p.result);
 
-  // Derive the actual current round from roundsInfo (most reliable) or fall back to backend field
-  const actualCurrentRound = roundsInfo.length > 0
-    ? Math.max(...roundsInfo.map(r => r.round_number))
-    : (tournament.current_round || tournament.currentRound || 0);
-  const isFinalRound = actualCurrentRound === tournament.rounds;
+  // incompleteMatches scoped to the SELECTED round (what the arbiter is viewing)
+  const incompleteMatches = filteredPairings.filter(
+    (p) => !isMatchPlayed(p.result)
+  ).length;
 
-  const currentRoundInfo = roundsInfo.find(r => r.round_number === actualCurrentRound);
-  const isCurrentRoundSubmitted = currentRoundInfo ? currentRoundInfo.is_submitted : false;
-  const isSelectedRoundSubmitted = roundsInfo.find(r => r.round_number === selectedRound)?.is_submitted;
+  // actualCurrentRound: most authoritative source is roundsInfo max; fall back to tournament field
+  const actualCurrentRound =
+    roundsInfo.length > 0
+      ? Math.max(...roundsInfo.map((r) => r.round_number))
+      : tournament.current_round || tournament.currentRound || 0;
+
+  const isFinalRound = actualCurrentRound > 0 && actualCurrentRound === tournament.rounds;
+
+  // Two distinct submitted checks:
+  // isCurrentRoundSubmitted → guards the GENERATE button (latest round)
+  // isSelectedRoundSubmitted → guards the SUBMIT button (what you're viewing)
+  const isCurrentRoundSubmitted =
+    roundsInfo.find((r) => r.round_number === actualCurrentRound)?.is_submitted ?? false;
+
+  const isSelectedRoundSubmitted =
+    roundsInfo.find((r) => r.round_number === selectedRound)?.is_submitted ?? false;
+
+  const actualRoundPairings = pairings.filter(
+    (p) => p.round_number === actualCurrentRound
+  );
+
+  const actualIncompleteMatches = actualRoundPairings.filter(
+    (p) => !isMatchPlayed(p.result)
+  ).length;
+
+  console.log("DEBUG ROUND INFO:", {
+    roundsInfo,
+    roundsInfoLength: roundsInfo.length,
+    tournamentCurrentRound: tournament.current_round || tournament.currentRound,
+    actualCurrentRound,
+    isCurrentRoundSubmitted,
+    canGenerateNextRound: !generatingPairings && (actualCurrentRound === 0 || (isCurrentRoundSubmitted && actualIncompleteMatches === 0)),
+    actualIncompleteMatches
+  });
+
+  // Generate button should only be enabled when:
+  // - No round has started yet (round 0), OR
+  // - Current round is fully submitted with no incomplete matches
+  const canGenerateNextRound =
+    !generatingPairings &&
+    (actualCurrentRound === 0 ||
+      (isCurrentRoundSubmitted && actualIncompleteMatches === 0));
 
   const sortedStandings = standings;
 
@@ -422,6 +468,7 @@ export default function TournamentDetails() {
     (tournament.status === "upcoming" || tournament.status === "published") &&
     approvedRegistrations.length < parseInt(tournament.max_players || 64);
 
+  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
   const isRegistered = registrations.some(
     (r) => r.user_email === userData.email,
   );
@@ -453,15 +500,10 @@ export default function TournamentDetails() {
             <Badge variant={tournament.rated ? "default" : "secondary"}>
               {tournament.rated ? "Rated" : "Unrated"}
             </Badge>
-            {/* Role Badge — shown only to tournament stakeholders */}
-            {roleType === "MAIN_ARBITER" && (
+            {/* Role Badge */}
+            {isArbiter && (
               <Badge className="bg-chess-gold/20 text-chess-gold border border-chess-gold/40 font-semibold">
-                👑 Main Arbiter
-              </Badge>
-            )}
-            {roleType === "SUB_ARBITER" && (
-              <Badge className="bg-info/15 text-info border border-info/30 font-semibold">
-                🎖 Sub-Arbiter
+                👑 Arbiter
               </Badge>
             )}
           </div>
@@ -547,7 +589,7 @@ export default function TournamentDetails() {
             </div>
             <div>
               <div className="text-2xl font-bold">
-                {tournament.currentRound}/{tournament.rounds}
+                {actualCurrentRound}/{tournament.rounds}
               </div>
               <div className="text-xs text-muted-foreground">Rounds</div>
             </div>
@@ -896,30 +938,8 @@ export default function TournamentDetails() {
                 <div className="text-center py-10 text-muted-foreground flex flex-col items-center justify-center">
                   <Flag className="h-10 w-10 mb-3 opacity-30" />
                   <p className="text-sm">No pairings generated yet.</p>
-                  {permissions.canGeneratePairings && tournament.status === 'active' && (tournament.current_round === 0 || tournament.currentRound === 0) && (
-                    <div className="mt-6">
-                      {/* Generate Round 1 Pairings Button */}
-                      <Button
-                        variant="primary"
-                        onClick={handleGenerateNextRound}
-                        disabled={generatingPairings || tournament.status !== "active"}
-                        className="bg-chess-gold hover:bg-chess-gold/90 text-black border-none font-bold shadow-md"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        {generatingPairings ? "Generating..." : "Generate Round 1 Pairings"}
-                      </Button>
-
-                      {tournament.status !== "active" && (
-                        <p className="text-xs mt-3 text-warning">
-                          Tournament must be started before generating pairings.
-                        </p>
-                      )}
-                      {tournament.status === "active" && (
-                        <p className="text-xs mt-3">
-                          Accept at least 2 players, then click "Generate Round 1 Pairings".
-                        </p>
-                      )}
-                    </div>
+                  {permissions.canGeneratePairings && tournament.status === 'active' && (
+                    <p className="text-xs mt-2">Use the Generate button below to start Round 1.</p>
                   )}
                 </div>
               ) : (
@@ -983,115 +1003,123 @@ export default function TournamentDetails() {
               )}
 
               {/* Arbiter Controls at Bottom */}
-              {permissions.canFinalizeRound && pairings.length > 0 && tournament.status === "active" && (
-                <div className="mt-8 flex flex-col items-end gap-6 pt-6 border-t-2 border-dashed border-border">
+              {permissions.canFinalizeRound && tournament.status === "active" && (
+                <div className="mt-8 pt-6 border-t-2 border-dashed border-border flex flex-col gap-4">
 
-                  {/* STEP 1: Finalize Current Results */}
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-3">
-                      {incompleteMatches > 0 ? (
-                        <span className="text-xs text-warning bg-warning/10 px-2 py-1 rounded">
-                          {incompleteMatches} matches still pending results
-                        </span>
-                      ) : !isCurrentRoundSubmitted ? (
-                        <span className="text-xs text-success font-medium animate-pulse">
-                          Ready to finalize! Click here ➔
-                        </span>
-                      ) : null}
+                  <div className="flex flex-wrap items-center justify-end gap-4">
 
-                      <Button
-                        variant={isCurrentRoundSubmitted ? "outline" : "success"}
-                        onClick={handleFinalizeRound}
-                        disabled={isCurrentRoundSubmitted || incompleteMatches > 0 || generatingPairings}
-                        className={`min-w-[180px] shadow-sm transition-all ${!isCurrentRoundSubmitted && incompleteMatches === 0 ? "ring-2 ring-success ring-offset-2 scale-105" : ""
-                          }`}
-                      >
-                        <Flag className="h-4 w-4 mr-2" />
-                        {isCurrentRoundSubmitted ? "Round Results Finalized" : "Submit Final Results"}
-                      </Button>
-                    </div>
+                    {/* GENERATE — only shown while rounds remain */}
+                    {actualCurrentRound < (tournament.rounds || 100) && (
+                      <div className="flex flex-col items-end gap-1">
+                        {/* Warn arbiter why Generate is blocked */}
+                        {actualCurrentRound > 0 && !isCurrentRoundSubmitted && (
+                          <span className="text-xs text-warning font-medium">
+                            ⚠️ Finalize Round {actualCurrentRound} before generating next
+                          </span>
+                        )}
+                        {actualCurrentRound > 0 && isCurrentRoundSubmitted && actualIncompleteMatches > 0 && (
+                          <span className="text-xs text-warning font-medium">
+                            ⚠️ {actualIncompleteMatches} result(s) missing in Round {actualCurrentRound}
+                          </span>
+                        )}
+                        <Button
+                          onClick={handleGenerateNextRound}
+                          disabled={!canGenerateNextRound}
+                          variant="outline"
+                          className="border-chess-gold text-foreground hover:bg-chess-gold/10 font-bold px-6 shadow-sm"
+                        >
+                          {generatingPairings ? (
+                            <div className="h-4 w-4 animate-spin border-2 border-current border-t-transparent rounded-full mr-2" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-2 text-chess-gold" />
+                          )}
+                          {actualCurrentRound === 0
+                            ? "Generate Round 1"
+                            : `Generate Round ${actualCurrentRound + 1}`}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* SUBMIT — always visible once there are pairings to view */}
+                    {actualCurrentRound > 0 && (
+                      <div className="flex flex-col items-end gap-1">
+                        {incompleteMatches > 0 && !isSelectedRoundSubmitted && (
+                          <span className="text-xs text-warning bg-warning/10 px-2 py-1 rounded">
+                            {incompleteMatches} result{incompleteMatches !== 1 ? "s" : ""} still pending in Round {selectedRound}
+                          </span>
+                        )}
+                        {incompleteMatches === 0 && !isSelectedRoundSubmitted && (
+                          <span className="text-xs text-success font-medium animate-pulse">
+                            All results entered — ready to finalize ➔
+                          </span>
+                        )}
+                        <Button
+                          variant={isSelectedRoundSubmitted ? "outline" : "success"}
+                          onClick={handleFinalizeRound}
+                          disabled={
+                            isSelectedRoundSubmitted ||
+                            incompleteMatches > 0 ||
+                            generatingPairings ||
+                            selectedRound === 0
+                          }
+                          className={`min-w-[200px] shadow-sm transition-all ${!isSelectedRoundSubmitted && incompleteMatches === 0
+                            ? "ring-2 ring-success ring-offset-2 scale-105"
+                            : ""
+                            }`}
+                        >
+                          <Flag className="h-4 w-4 mr-2" />
+                          {isSelectedRoundSubmitted
+                            ? `Round ${selectedRound} Finalized ✓`
+                            : "Submit Final Results"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
-
-                  {/* STEP 3: Tournament Completion (Final Round Only) */}
-                  {tournament.current_round === tournament.rounds && isCurrentRoundSubmitted && permissions.canCompleteTournament && (
-                    <Button
-                      onClick={handleCompleteTournament}
-                      disabled={generatingPairings}
-                      className="bg-success text-success-foreground hover:bg-success/90 shadow-xl px-8 py-6 text-lg font-bold animate-in zoom-in-95"
-                    >
-                      <Trophy className="h-6 w-6 mr-2" />
-                      Complete Tournament & Finalize Standings
-                    </Button>
-                  )}
-
-                  {/* Regenerate Button (Isolated, Creator Only) */}
-                  {permissions.canRegeneratePairings && !isCurrentRoundSubmitted && filteredPairings.length > 0 && incompleteMatches === filteredPairings.length && (
-                    <div className="w-full flex justify-start -mt-16">
+                  {/* COMPLETE TOURNAMENT — appears only when final round is submitted */}
+                  {isFinalRound && isCurrentRoundSubmitted && permissions.canCompleteTournament && (
+                    <div className="flex justify-end">
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRegeneratePairings}
+                        onClick={handleCompleteTournament}
                         disabled={generatingPairings}
-                        className="border-warning text-warning hover:bg-warning/10"
+                        className="bg-success text-success-foreground hover:bg-success/90 shadow-xl px-8 py-6 text-lg font-bold animate-in zoom-in-95"
                       >
-                        Regenerate Pairings
+                        <Trophy className="h-6 w-6 mr-2" />
+                        Complete Tournament & Finalize Standings
                       </Button>
                     </div>
                   )}
+
+                  {/* REGENERATE — only when no results entered yet for current round */}
+                  {permissions.canRegeneratePairings &&
+                    !isCurrentRoundSubmitted &&
+                    filteredPairings.length > 0 &&
+                    incompleteMatches === filteredPairings.length && (
+                      <div className="flex justify-start">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRegeneratePairings}
+                          disabled={generatingPairings}
+                          className="border-warning text-warning hover:bg-warning/10"
+                        >
+                          Regenerate Pairings
+                        </Button>
+                      </div>
+                    )}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Generate Next Round — visible whenever pairings exist and we're not on the last round */}
-          {permissions.canGeneratePairings && tournament.status === "active" && actualCurrentRound > 0 && actualCurrentRound < tournament.rounds && (
-            <div className="mt-6 p-4 rounded-xl border-2 border-dashed border-chess-gold/50 bg-chess-gold/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-bold text-foreground">
-                  Next: Round {actualCurrentRound + 1} of {tournament.rounds}
-                </span>
-                {!isCurrentRoundSubmitted ? (
-                  <span className="text-xs text-warning font-medium">
-                    ⚠️ Finalize Round {actualCurrentRound} results first before generating next round.
-                  </span>
-                ) : incompleteMatches > 0 ? (
-                  <span className="text-xs text-warning">
-                    {incompleteMatches} match{incompleteMatches > 1 ? 'es' : ''} still need results.
-                  </span>
-                ) : (
-                  <span className="text-xs text-success font-medium">
-                    ✅ Round {actualCurrentRound} finalized — ready to generate next round!
-                  </span>
-                )}
-              </div>
-              <Button
-                onClick={handleGenerateNextRound}
-                disabled={generatingPairings || !isCurrentRoundSubmitted || incompleteMatches > 0}
-                className="min-w-[240px] font-bold shadow-lg bg-chess-gold hover:bg-chess-gold/90 text-black transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed text-sm px-6 py-5"
-                title={!isCurrentRoundSubmitted ? "Finalize current round first" : incompleteMatches > 0 ? "Enter all results first" : ""}
-              >
-                {generatingPairings ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin border-2 border-black border-t-transparent rounded-full mr-2" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Generate Round {actualCurrentRound + 1} Pairings
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
+
         </TabsContent>
 
         <TabsContent value="standings" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
-                <span>Ranking after Round {tournament.currentRound || 0}</span>
+                <span>Ranking after Round {actualCurrentRound || 0}</span>
                 <Button variant="outline" size="sm" onClick={loadTournament} className="border-chess-gold text-chess-gold hover:bg-chess-gold/10">
                   Refresh Standings
                 </Button>

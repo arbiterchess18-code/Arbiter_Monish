@@ -7,9 +7,14 @@ import { apiFetch as fetch } from "./api.js";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const getAuthHeaders = () => {
-  return {
+  const token = sessionStorage.getItem("token");
+  const headers = {
     "Content-Type": "application/json",
   };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
 };
 
 const handleResponse = async (response) => {

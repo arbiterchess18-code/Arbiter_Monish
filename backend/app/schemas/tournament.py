@@ -201,6 +201,7 @@ class TournamentResponse(TournamentBase):
     tournament_id: int
     created_by: int
     status: str
+    current_round: Optional[int] = 0
     created_at: datetime
     updated_at: datetime
     registered_count: Optional[int] = 0

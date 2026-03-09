@@ -20,4 +20,5 @@ class PairingResponse(BaseModel):
     round_status: str
     pairing_system: Optional[str] = None
     tie_breaker_rules: List[str]
+    rounds_info: List[dict] = []
     pairings: List[MatchBase]
