@@ -345,24 +345,6 @@ export const registerPlayer = async (tournamentId, formData) => {
 };
 
 /**
- * Join a general/free tournament directly (Instant Approval)
- */
-export const joinGeneralTournament = async (tournamentId, fideId) => {
-  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/join`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ fideId: fideId || null }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || "Failed to join tournament");
-  }
-
-  return await response.json();
-};
-
-/**
  * Register a player manually onsite (Arbiter only)
  */
 export const manualRegisterPlayer = async (tournamentId, manualData) => {

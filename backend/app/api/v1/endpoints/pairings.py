@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -9,12 +7,6 @@ from ....database import get_db
 from ....core.security import get_current_user, is_tournament_creator_or_admin, get_password_hash
 from ....schemas.match import PairingResponse, MatchResultUpdate
 from ....services import notification_service
-from ....logic.dutch_swiss import generate_dutch_swiss_pairings
-
-# Enable Dutch Swiss debug output in the uvicorn console:
-# Set to logging.DEBUG for full bracket/backtrack traces.
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("dutch_swiss").setLevel(logging.DEBUG)
 
 router = APIRouter()
 
@@ -191,62 +183,24 @@ async def finalize_round(
     return {"message": f"Round {round_number} finalized successfully", "is_submitted": True}
 
 
-def _generate_pairings_for_round(
-    db: Session,
-    tournament: models.Tournament,
-    round_record: models.Round,
-    approved_registrations: list,
-):
+def _generate_pairings_for_round(db: Session, tournament: models.Tournament, round_record: models.Round, approved_registrations: list):
     """
-    Dispatches to the correct pairing engine based on tournament.pairing_system:
-      • Swiss       → FIDE Dutch Swiss engine (dutch_swiss.py)
-      • Knockout    → Bracket interleave (seed-based)
-      • Round Robin → Rotating schedule
+    Core pairing logic extracted for reuse (Start and Regenerate).
     """
+    sorted_regs = approved_registrations
     pairing_system = (tournament.pairing_system or "Swiss").lower()
     next_round = round_record.round_number
 
-    # ── Initial Sorting (Seeding) for Round 1 ────────────────────────────────
-    # We always ensure the registrations are accurately seeded by rating then name
-    # before passing to ANY pairing engine if it's Round 1.
-    if next_round == 1:
-        # Load user data for sorting
-        for reg in approved_registrations:
-            if not getattr(reg, "user", None):
-                reg.user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
-                
-        # Sort by FIDE Rating (DESC), then Name (ASC)
-        approved_registrations.sort(
-            key=lambda r: (
-                -(r.user.fide_rating or r.user.national_rating or 0),
-                (r.user.first_name or r.user.username or "").lower()
-            )
-        )
-        
-        # Apply the computed sequence as the official seed
-        for idx, reg in enumerate(approved_registrations, start=1):
-            reg.seed = idx
-
-
-    # ── FIDE Dutch Swiss ──────────────────────────────────────────────────────
-    if "swiss" in pairing_system:
-        generate_dutch_swiss_pairings(
-            db=db,
-            tournament=tournament,
-            round_record=round_record,
-            approved_registrations=approved_registrations,
-        )
-        return
-
-    # ── Knockout (bracket interleave) ─────────────────────────────────────────
     if "knockout" in pairing_system:
         sorted_regs = sorted(
             approved_registrations,
-            key=lambda r: (float(r.current_points or 0), -(r.user.fide_rating or 0), getattr(r, "seed", r.registration_id)),
+            key=lambda registration: (
+                float(registration.current_points or 0), registration.registration_id),
             reverse=True,
         )
         reordered = []
-        left, right = 0, len(sorted_regs) - 1
+        left = 0
+        right = len(sorted_regs) - 1
         while left <= right:
             if left == right:
                 reordered.append(sorted_regs[left])
@@ -256,17 +210,20 @@ def _generate_pairings_for_round(
             left += 1
             right -= 1
         sorted_regs = reordered
-
-    # ── Round Robin (rotating schedule) ──────────────────────────────────────
     elif "round robin" in pairing_system:
-        sorted_regs = sorted(approved_registrations, key=lambda r: getattr(r, "seed", r.registration_id))
+        sorted_regs = sorted(
+            approved_registrations, key=lambda registration: registration.registration_id)
         rotation = (next_round - 1) % max(len(sorted_regs), 1)
         sorted_regs = sorted_regs[rotation:] + sorted_regs[:rotation]
-
     else:
-        sorted_regs = approved_registrations
+        # Standard Swiss-ish sorting by points then ID
+        sorted_regs = sorted(
+            approved_registrations,
+            key=lambda registration: (
+                float(registration.current_points or 0), registration.registration_id),
+            reverse=True,
+        )
 
-    # Sequential pairing for Knockout / Round Robin
     board_number = 1
     index = 0
     while index < len(sorted_regs):
@@ -279,10 +236,11 @@ def _generate_pairings_for_round(
             white_player_id=white_reg.user_id,
             black_player_id=black_reg.user_id if black_reg else None,
             board_number=board_number,
-            result="1-0" if not black_reg else None,
+            result="1-0" if not black_reg else None, # BYE gives 1 point
         )
         db.add(new_match)
 
+        # Update cache points for BYE (Standings will recalculate anyway, but for immediate UI consistency)
         if not black_reg:
             white_reg.current_points = float(white_reg.current_points or 0) + 1.0
 

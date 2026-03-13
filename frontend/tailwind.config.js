@@ -17,9 +17,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ["Cabinet Grotesk", "sans-serif"],
-        body: ["Satoshi", "sans-serif"],
-        inter: ["Inter", "sans-serif"],
+        display: ["Playfair Display", "serif"],
+        body: ["DM Sans", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -83,22 +82,11 @@ export default {
           gold: "hsl(var(--chess-gold))",
           silver: "hsl(var(--chess-silver))",
         },
-        brutal: {
-          yellow: "#ffe17c",
-          charcoal: "#171e19",
-          sage: "#b7c6c2",
-          ui: "#ffffff",
-        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-      },
-      boxShadow: {
-        brutal: "4px 4px 0px 0px #000000",
-        "brutal-lg": "8px 8px 0px 0px #000000",
-        "brutal-xl": "12px 12px 0px 0px #000000",
       },
       keyframes: {
         "accordion-down": {
@@ -125,14 +113,6 @@ export default {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        marquee: {
-          "0%": { transform: "translateX(0%)" },
-          "100%": { transform: "translateX(-100%)" },
-        },
-        "fade-in-up": {
-          "0%": { opacity: "0", transform: "translateY(20px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -141,8 +121,6 @@ export default {
         "scale-in": "scale-in 0.3s ease-out forwards",
         "slide-in-left": "slide-in-left 0.3s ease-out",
         "count-up": "count-up 0.5s ease-out forwards",
-        marquee: "marquee 25s linear infinite",
-        "fade-in-up": "fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",
       },
     },
   },

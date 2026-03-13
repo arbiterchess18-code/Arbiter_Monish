@@ -10,41 +10,9 @@ from ....schemas.registration import (
     TournamentRegistrationCreate, TournamentRegistrationResponse, 
     TournamentRegistrationStatusUpdate, RegistrationFormFieldCreate, RegistrationFormFieldResponse
 )
-from pydantic import BaseModel
 from ....services import notification_service
 
-class GeneralJoinRequest(BaseModel):
-    fideId: str | None = None
-
 router = APIRouter()
-
-@router.post("/{tournament_id}/join")
-async def join_general_tournament(
-    tournament_id: int, 
-    payload: GeneralJoinRequest,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    # Check if already registered
-    existing = db.query(models.TournamentRegistration).filter(
-        models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.user_id == current_user.user_id
-    ).first()
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Already registered")
-
-    # Instant approval for general tournaments
-    # Capture the FIDE ID if provided in the simple payload
-    new_reg = models.TournamentRegistration(
-        tournament_id=tournament_id,
-        user_id=current_user.user_id,
-        status="approved",
-        fide_id=payload.fideId
-    )
-    db.add(new_reg)
-    db.commit()
-    return {"message": "Successfully registered"}
 
 @router.post("/{tournament_id}/registrations", response_model=TournamentRegistrationResponse, status_code=status.HTTP_201_CREATED)
 async def register_for_tournament(
@@ -129,9 +97,7 @@ async def register_for_tournament(
         tournament_id=tournament_id,
         user_id=user_to_register_id,
         status=status_value,
-        color_history="",   # Initialized empty; W/B chars appended by pairing engine each round
-        fide_id=payload.get("fideId"), # FIDE ID from form
-        # Note: form payload (payload variable) is intentionally NOT persisted to color_history
+        color_history=json.dumps(payload),
     )
     db.add(new_registration)
     db.commit()
