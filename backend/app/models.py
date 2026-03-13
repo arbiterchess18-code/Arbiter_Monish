@@ -227,6 +227,8 @@ class TournamentRegistration(Base):
     seed = Column(Integer)
     color_history = Column(String(255), default="")  # e.g. "WBW"
     bye_received = Column(Boolean, default=False)
+    
+    fide_id = Column(String(20), nullable=True)
 
     tournament = relationship("Tournament", back_populates="registrations")
     user = relationship("User", back_populates="registrations")

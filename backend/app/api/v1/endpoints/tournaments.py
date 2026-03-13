@@ -245,6 +245,11 @@ async def get_tournament(tournament_id: int, db: Session = Depends(get_db)):
         models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    tournament.registered_count = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).count()
     return tournament
 
 @router.put("/{tournament_id}", response_model=TournamentResponse)

@@ -33,7 +33,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { registerPlayer } from "@/lib/tournament-service";
+import { registerPlayer, joinGeneralTournament } from "@/lib/tournament-service";
 
 export function JoinTournamentDialog({
   tournament,
@@ -70,10 +70,7 @@ export function JoinTournamentDialog({
     });
   }
 
-  const isEligible =
-    !tournament.minRating ||
-    parseInt(formData.rating) >= parseInt(tournament.minRating);
-  const canJoin = isEligible && formData.name && formData.email;
+  const canJoin = formData.name && formData.email;
 
   const handleJoinClick = () => {
     if (!canJoin) {
@@ -97,10 +94,18 @@ export function JoinTournamentDialog({
     setRegistering(true);
 
     try {
-      await registerPlayer(tournament.id, {
-        ...formData,
-        rating: parseInt(formData.rating) || 0,
-      });
+      const isPaid = tournament.rated && tournament.entryFee && tournament.entryFee !== "0";
+
+      if (isPaid) {
+        // Standard registration for paid Tournaments
+        await registerPlayer(tournament.id, {
+          ...formData,
+          rating: parseInt(formData.rating) || 0,
+        });
+      } else {
+        // Instant approval for general/free Tournaments
+        await joinGeneralTournament(tournament.id, formData.fideId);
+      }
 
       toast.success(`Successfully joined ${tournament.name}!`, {
         description: notifications.start
@@ -153,8 +158,7 @@ export function JoinTournamentDialog({
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Users className="h-4 w-4" />
                 <span>
-                  {tournament.registeredPlayers?.length || 0}/
-                  {tournament.maxPlayers || 64} players
+                  {tournament.registered_count || 0}/{tournament.maxPlayers || tournament.max_players || 64} players
                 </span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -188,10 +192,11 @@ export function JoinTournamentDialog({
                 <Input
                   placeholder="Your full name"
                   value={formData.name}
+                  disabled
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  className="mt-1"
+                  className="mt-1 bg-muted font-medium text-muted-foreground cursor-not-allowed"
                 />
               </div>
 
@@ -201,22 +206,23 @@ export function JoinTournamentDialog({
                   type="email"
                   placeholder="your.email@example.com"
                   value={formData.email}
+                  disabled
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className="mt-1"
+                  className="mt-1 bg-muted font-medium text-muted-foreground cursor-not-allowed"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Rating {tournament.minRating ? "*" : ""}</Label>
+                  <Label>FIDE ID (Optional)</Label>
                   <Input
-                    type="number"
-                    placeholder="1500"
-                    value={formData.rating}
+                    type="text"
+                    placeholder="Enter FIDE ID"
+                    value={formData.fideId}
                     onChange={(e) =>
-                      setFormData({ ...formData, rating: e.target.value })
+                      setFormData({ ...formData, fideId: e.target.value })
                     }
                     className="mt-1"
                   />
@@ -236,19 +242,7 @@ export function JoinTournamentDialog({
               </div>
 
               {tournament.rated && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>FIDE ID</Label>
-                    <Input
-                      placeholder="Optional"
-                      value={formData.fideId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, fideId: e.target.value })
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-
+                <div className="grid grid-cols-1 gap-3">
                   <div>
                     <Label>Title</Label>
                     <Input
@@ -264,21 +258,7 @@ export function JoinTournamentDialog({
               )}
             </div>
 
-            {tournament.minRating &&
-              formData.rating &&
-              parseInt(formData.rating) < parseInt(tournament.minRating) && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
-                  <div className="text-sm">
-                    <p className="font-medium text-destructive">
-                      Rating Below Minimum
-                    </p>
-                    <p className="text-muted-foreground">
-                      Required minimum rating: {tournament.minRating}
-                    </p>
-                  </div>
-                </div>
-              )}
+
 
             {tournament.rated &&
               tournament.entryFee &&
@@ -337,7 +317,7 @@ export function JoinTournamentDialog({
                 ? "Registering..."
                 : tournament.entryFee && tournament.entryFee !== "0"
                   ? "Proceed to Payment"
-                  : "Join Tournament"}
+                  : "Register Now"}
             </Button>
           </DialogFooter>
         </DialogContent>
