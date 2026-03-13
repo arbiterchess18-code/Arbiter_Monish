@@ -12,6 +12,7 @@ from ....core.config import ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 import jwt
 from ....schemas.token import Token
 from ....schemas.user import UserCreate
+from ....services.fide import fetch_fide_player_info
 from ....core.limiter import limiter
 
 router = APIRouter()
@@ -152,6 +153,20 @@ async def signup(
         last_name=user_in.last_name,
         is_active=True
     )
+
+    if user_in.fide_id:
+        try:
+            if db.query(models.User).filter(models.User.fide_id == user_in.fide_id).first():
+                raise HTTPException(status_code=400, detail="FIDE ID already claimed")
+            
+            fide_data = await fetch_fide_player_info(user_in.fide_id)
+            new_user.fide_id = str(fide_data.get("fide_id"))
+            new_user.fide_rating = fide_data.get("classical_rating")
+            new_user.title = fide_data.get("fide_title")
+            new_user.country = fide_data.get("federation")
+        except HTTPException as e:
+            raise HTTPException(status_code=400, detail=f"Invalid FIDE ID: {e.detail}")
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)

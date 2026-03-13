@@ -7,6 +7,10 @@ class UserBase(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    fide_id: Optional[str] = None
+    fide_rating: Optional[int] = None
+    title: Optional[str] = None
+    country: Optional[str] = "India"
 
 class UserCreate(UserBase):
     password: str
