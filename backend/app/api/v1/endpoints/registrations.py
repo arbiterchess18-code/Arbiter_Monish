@@ -7,12 +7,13 @@ from .... import models
 from ....database import get_db
 from ....core.security import get_current_user, is_tournament_creator_or_admin, is_tournament_staff_or_admin, check_role, has_privileged_role, get_password_hash
 from ....schemas.registration import (
-    TournamentRegistrationCreate, TournamentRegistrationResponse, 
+    TournamentRegistrationCreate, TournamentRegistrationResponse,
     TournamentRegistrationStatusUpdate, RegistrationFormFieldCreate, RegistrationFormFieldResponse
 )
 from ....services import notification_service
 
 router = APIRouter()
+
 
 @router.post("/{tournament_id}/registrations", response_model=TournamentRegistrationResponse, status_code=status.HTTP_201_CREATED)
 async def register_for_tournament(
@@ -41,25 +42,28 @@ async def register_for_tournament(
 
     if registration_data.is_manual:
         if not is_tournament_staff_or_admin(tournament, current_user):
-            raise HTTPException(status_code=403, detail="Only tournament staff or admin can register players manually")
+            raise HTTPException(
+                status_code=403, detail="Only tournament staff or admin can register players manually")
         if not registration_data.player_email or not registration_data.player_name:
-            raise HTTPException(status_code=400, detail="Player email and name are required for manual registration")
-            
+            raise HTTPException(
+                status_code=400, detail="Player email and name are required for manual registration")
+
         target_email = registration_data.player_email.lower().strip()
-        target_user = db.query(models.User).filter(models.User.email == target_email).first()
+        target_user = db.query(models.User).filter(
+            models.User.email == target_email).first()
         if not target_user:
             target_user = models.User(
                 username=target_email.split("@")[0] + "_onsite",
                 email=target_email,
                 first_name=registration_data.player_name,
-                hashed_password=get_password_hash("onsite123"), # placeholder
+                hashed_password=get_password_hash("onsite123"),  # placeholder
                 fide_id=registration_data.player_fide_id,
                 fide_rating=registration_data.player_rating or 0,
                 is_active=True
             )
             db.add(target_user)
             db.flush()
-            
+
         user_to_register_id = target_user.user_id
         status_value = "approved"
         payload = registration_data.form_data or {}
@@ -85,6 +89,8 @@ async def register_for_tournament(
         ).order_by(models.RegistrationFormField.field_order).all()
 
         for field in form_fields:
+            if field.field_type == "Display Image":
+                continue
             if field.is_required:
                 value = payload.get(field.field_name)
                 if value is None or (isinstance(value, str) and not value.strip()):
@@ -103,8 +109,10 @@ async def register_for_tournament(
     db.commit()
     db.refresh(new_registration)
 
-    target_user_model = db.query(models.User).filter(models.User.user_id == user_to_register_id).first()
-    full_name = f"{target_user_model.first_name or ''} {target_user_model.last_name or ''}".strip() or target_user_model.username
+    target_user_model = db.query(models.User).filter(
+        models.User.user_id == user_to_register_id).first()
+    full_name = f"{target_user_model.first_name or ''} {target_user_model.last_name or ''}".strip(
+    ) or target_user_model.username
     return {
         "registration_id": new_registration.registration_id,
         "tournament_id": tournament_id,
@@ -117,6 +125,7 @@ async def register_for_tournament(
         "seed": new_registration.seed,
         "player_rating": target_user_model.fide_rating or target_user_model.national_rating or 0,
     }
+
 
 @router.get("/{tournament_id}/registrations", response_model=List[TournamentRegistrationResponse])
 async def get_tournament_registrations(
@@ -144,7 +153,8 @@ async def get_tournament_registrations(
             models.TournamentRegistration.status.in_(["approved", "active"])
         )
 
-    registrations = query.order_by(models.TournamentRegistration.registration_date.desc()).all()
+    registrations = query.order_by(
+        models.TournamentRegistration.registration_date.desc()).all()
 
     response = []
     for registration in registrations:
@@ -164,6 +174,7 @@ async def get_tournament_registrations(
             "player_rating": user.fide_rating or user.national_rating or 0,
         })
     return response
+
 
 @router.patch("/{tournament_id}/registrations/{registration_id}/status", response_model=TournamentRegistrationResponse)
 async def update_registration_status(
@@ -228,6 +239,8 @@ async def update_registration_status(
     }
 
 # Registration form fields endpoints
+
+
 @router.post("/{tournament_id}/registration-form-fields", response_model=RegistrationFormFieldResponse, status_code=status.HTTP_201_CREATED)
 async def create_form_field(
     tournament_id: int,
@@ -253,6 +266,7 @@ async def create_form_field(
     db.commit()
     db.refresh(new_field)
     return new_field
+
 
 @router.get("/{tournament_id}/registration-form-fields", response_model=List[RegistrationFormFieldResponse])
 async def get_form_fields(tournament_id: int, db: Session = Depends(get_db)):

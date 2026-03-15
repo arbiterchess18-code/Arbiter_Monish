@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -33,7 +34,10 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { registerPlayer } from "@/lib/tournament-service";
+import {
+  getRegistrationFormFields,
+  registerPlayer,
+} from "@/lib/tournament-service";
 
 export function JoinTournamentDialog({
   tournament,
@@ -43,6 +47,10 @@ export function JoinTournamentDialog({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [loadingCustomFields, setLoadingCustomFields] = useState(false);
+  const [registrationFields, setRegistrationFields] = useState([]);
+  const [customFormData, setCustomFormData] = useState({});
+  const [customFormErrors, setCustomFormErrors] = useState({});
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -59,23 +67,71 @@ export function JoinTournamentDialog({
 
   if (!tournament) return null;
 
+  const tournamentId = tournament.id ?? tournament.tournament_id;
+  const tournamentName = tournament.name ?? tournament.tournament_name;
+  const minRating = tournament.minRating ?? tournament.min_rating;
+
   // Pre-fill from userData if available
   const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
-  if (userData.email && !formData.email) {
-    setFormData({
-      ...formData,
-      name: userData.name || "",
-      email: userData.email || "",
-      rating: userData.rating || "",
-    });
-  }
+
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || userData.name || "",
+      email: prev.email || userData.email || "",
+      rating: prev.rating || userData.rating || "",
+    }));
+  }, [userData.email, userData.name, userData.rating]);
+
+  useEffect(() => {
+    const fetchFields = async () => {
+      if (!open || !tournamentId) return;
+      setLoadingCustomFields(true);
+      const fields = await getRegistrationFormFields(tournamentId);
+      setRegistrationFields(fields || []);
+      setLoadingCustomFields(false);
+    };
+    fetchFields();
+  }, [open, tournamentId]);
+
+  const useCustomRegistration = registrationFields.length > 0;
 
   const isEligible =
-    !tournament.minRating ||
-    parseInt(formData.rating) >= parseInt(tournament.minRating);
-  const canJoin = isEligible && formData.name && formData.email;
+    useCustomRegistration ||
+    !minRating ||
+    parseInt(formData.rating) >= parseInt(minRating);
+
+  const validateCustomForm = () => {
+    const nextErrors = {};
+    registrationFields.forEach((field) => {
+      if (field.field_type === "Display Image") return;
+      if (!field.is_required) return;
+      const value = customFormData[field.field_name];
+      if (!value || `${value}`.trim() === "") {
+        nextErrors[field.field_name] = `${field.field_name} is required`;
+      }
+    });
+    setCustomFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const canJoin = useCustomRegistration
+    ? registrationFields.every((field) => {
+        if (field.field_type === "Display Image") return true;
+        if (!field.is_required) return true;
+        const value = customFormData[field.field_name];
+        return (
+          value !== undefined && value !== null && `${value}`.trim() !== ""
+        );
+      })
+    : isEligible && formData.name && formData.email;
 
   const handleJoinClick = () => {
+    if (useCustomRegistration && !validateCustomForm()) {
+      toast.error("Please fill all required custom fields");
+      return;
+    }
+
     if (!canJoin) {
       toast.error("Please fill in all required fields");
       return;
@@ -97,12 +153,17 @@ export function JoinTournamentDialog({
     setRegistering(true);
 
     try {
-      await registerPlayer(tournament.id, {
-        ...formData,
-        rating: parseInt(formData.rating) || 0,
-      });
+      await registerPlayer(
+        tournamentId,
+        useCustomRegistration
+          ? customFormData
+          : {
+              ...formData,
+              rating: parseInt(formData.rating) || 0,
+            },
+      );
 
-      toast.success(`Successfully joined ${tournament.name}!`, {
+      toast.success(`Successfully joined ${tournamentName}!`, {
         description: notifications.start
           ? "You'll be notified when the tournament starts."
           : undefined,
@@ -120,11 +181,109 @@ export function JoinTournamentDialog({
         fideId: "",
         title: "",
       });
+      setCustomFormData({});
+      setCustomFormErrors({});
     } catch (error) {
       toast.error(error.message || "Failed to register");
     } finally {
       setRegistering(false);
     }
+  };
+
+  const renderCustomField = (field) => {
+    const fieldName = field.field_name;
+    const value = customFormData[fieldName] || "";
+
+    const onChange = (nextValue) => {
+      setCustomFormData((prev) => ({
+        ...prev,
+        [fieldName]: nextValue,
+      }));
+      if (customFormErrors[fieldName]) {
+        setCustomFormErrors((prev) => {
+          const updated = { ...prev };
+          delete updated[fieldName];
+          return updated;
+        });
+      }
+    };
+
+    if (field.field_type === "Display Image") {
+      return (
+        <div key={field.field_id || fieldName} className="space-y-2">
+          {fieldName ? <Label>{fieldName}</Label> : null}
+          {field.field_image ? (
+            <img
+              src={field.field_image}
+              alt={fieldName || "Registration information image"}
+              className="max-h-56 w-auto rounded-md border"
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Registration image will be shown here.
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div key={field.field_id || fieldName} className="space-y-2">
+        <Label>
+          {fieldName}
+          {field.is_required ? (
+            <span className="text-destructive"> *</span>
+          ) : null}
+        </Label>
+
+        {field.field_type === "Text" && (
+          <Input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+        {field.field_type === "Email" && (
+          <Input
+            type="email"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+        {field.field_type === "Number" && (
+          <Input
+            type="number"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+        {field.field_type === "Date" && (
+          <Input
+            type="date"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+        {field.field_type === "Text Area" && (
+          <Textarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+        {field.field_type === "Dropdown" && (
+          <Input
+            placeholder={`Enter ${fieldName}`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+
+        {customFormErrors[fieldName] ? (
+          <p className="text-xs text-destructive">
+            {customFormErrors[fieldName]}
+          </p>
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -181,92 +340,111 @@ export function JoinTournamentDialog({
 
             {/* Registration Form */}
             <div className="space-y-3 pt-2 border-t border-border">
-              <div className="font-medium text-sm">Player Information</div>
-
-              <div>
-                <Label>Full Name *</Label>
-                <Input
-                  placeholder="Your full name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="mt-1"
-                />
+              <div className="font-medium text-sm">
+                {useCustomRegistration
+                  ? "Custom Registration Form"
+                  : "Player Information"}
               </div>
 
-              <div>
-                <Label>Email *</Label>
-                <Input
-                  type="email"
-                  placeholder="your.email@example.com"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Rating {tournament.minRating ? "*" : ""}</Label>
-                  <Input
-                    type="number"
-                    placeholder="1500"
-                    value={formData.rating}
-                    onChange={(e) =>
-                      setFormData({ ...formData, rating: e.target.value })
-                    }
-                    className="mt-1"
-                  />
+              {loadingCustomFields ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading registration form...
                 </div>
+              ) : null}
 
-                <div>
-                  <Label>Phone</Label>
-                  <Input
-                    placeholder="+91 9876543210"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                    className="mt-1"
-                  />
+              {!loadingCustomFields && useCustomRegistration ? (
+                <div className="space-y-3">
+                  {registrationFields.map((field) => renderCustomField(field))}
                 </div>
-              </div>
-
-              {tournament.rated && (
-                <div className="grid grid-cols-2 gap-3">
+              ) : (
+                <>
                   <div>
-                    <Label>FIDE ID</Label>
+                    <Label>Full Name *</Label>
                     <Input
-                      placeholder="Optional"
-                      value={formData.fideId}
+                      placeholder="Your full name"
+                      value={formData.name}
                       onChange={(e) =>
-                        setFormData({ ...formData, fideId: e.target.value })
+                        setFormData({ ...formData, name: e.target.value })
                       }
                       className="mt-1"
                     />
                   </div>
 
                   <div>
-                    <Label>Title</Label>
+                    <Label>Email *</Label>
                     <Input
-                      placeholder="GM, IM, FM..."
-                      value={formData.title}
+                      type="email"
+                      placeholder="your.email@example.com"
+                      value={formData.email}
                       onChange={(e) =>
-                        setFormData({ ...formData, title: e.target.value })
+                        setFormData({ ...formData, email: e.target.value })
                       }
                       className="mt-1"
                     />
                   </div>
-                </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Rating {minRating ? "*" : ""}</Label>
+                      <Input
+                        type="number"
+                        placeholder="1500"
+                        value={formData.rating}
+                        onChange={(e) =>
+                          setFormData({ ...formData, rating: e.target.value })
+                        }
+                        className="mt-1"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Phone</Label>
+                      <Input
+                        placeholder="+91 9876543210"
+                        value={formData.phone}
+                        onChange={(e) =>
+                          setFormData({ ...formData, phone: e.target.value })
+                        }
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  {tournament.rated && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>FIDE ID</Label>
+                        <Input
+                          placeholder="Optional"
+                          value={formData.fideId}
+                          onChange={(e) =>
+                            setFormData({ ...formData, fideId: e.target.value })
+                          }
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label>Title</Label>
+                        <Input
+                          placeholder="GM, IM, FM..."
+                          value={formData.title}
+                          onChange={(e) =>
+                            setFormData({ ...formData, title: e.target.value })
+                          }
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            {tournament.minRating &&
+            {!useCustomRegistration &&
+              minRating &&
               formData.rating &&
-              parseInt(formData.rating) < parseInt(tournament.minRating) && (
+              parseInt(formData.rating) < parseInt(minRating) && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
                   <div className="text-sm">
@@ -274,7 +452,7 @@ export function JoinTournamentDialog({
                       Rating Below Minimum
                     </p>
                     <p className="text-muted-foreground">
-                      Required minimum rating: {tournament.minRating}
+                      Required minimum rating: {minRating}
                     </p>
                   </div>
                 </div>

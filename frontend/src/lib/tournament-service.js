@@ -104,7 +104,9 @@ export const getTournaments = async () => {
  */
 export const getArbiterTournaments = async (role = null) => {
   try {
-    const url = role ? `${API_URL}/tournaments/arbiter?role=${role}` : `${API_URL}/tournaments/arbiter`;
+    const url = role
+      ? `${API_URL}/tournaments/arbiter?role=${role}`
+      : `${API_URL}/tournaments/arbiter`;
     const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
@@ -124,8 +126,10 @@ export const getPublicTournaments = async (filters = {}) => {
   try {
     const params = new URLSearchParams();
     if (filters.search) params.append("search", filters.search);
-    if (filters.type && filters.type !== "all") params.append("type", filters.type);
-    if (filters.status && filters.status !== "all") params.append("status", filters.status);
+    if (filters.type && filters.type !== "all")
+      params.append("type", filters.type);
+    if (filters.status && filters.status !== "all")
+      params.append("status", filters.status);
 
     const queryString = params.toString() ? `?${params.toString()}` : "";
     const response = await fetch(`${API_URL}/tournaments/public${queryString}`);
@@ -174,13 +178,20 @@ export const getTournamentRegistrations = async (id) => {
 /**
  * Update registration status (Approve/Reject)
  */
-export const updateRegistrationStatus = async (tournamentId, registrationId, status) => {
+export const updateRegistrationStatus = async (
+  tournamentId,
+  registrationId,
+  status,
+) => {
   try {
-    const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations/${registrationId}/status`, {
-      method: "PATCH",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ status }),
-    });
+    const response = await fetch(
+      `${API_URL}/tournaments/${tournamentId}/registrations/${registrationId}/status`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      },
+    );
     await handleResponse(response);
     if (!response.ok) throw new Error("Failed to update registration status");
     return await response.json();
@@ -330,11 +341,14 @@ export const deleteTournament = async (id) => {
  * Register a player for a tournament (Real API)
  */
 export const registerPlayer = async (tournamentId, formData) => {
-  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ form_data: formData }),
-  });
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ form_data: formData }),
+    },
+  );
 
   if (!response.ok) {
     const errorData = await response.json();
@@ -357,11 +371,14 @@ export const manualRegisterPlayer = async (tournamentId, manualData) => {
     player_fide_id: manualData.fideId || undefined,
   };
 
-  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/registrations`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    },
+  );
 
   if (!response.ok) {
     const errorData = await response.json();
@@ -614,7 +631,9 @@ export const calculateTieBreakers = (tournament) => {
  */
 export const getStandings = async (tournamentId) => {
   try {
-    const response = await fetch(`${API_URL}/tournaments/${tournamentId}/standings`);
+    const response = await fetch(
+      `${API_URL}/tournaments/${tournamentId}/standings`,
+    );
     await handleResponse(response);
     if (!response.ok) throw new Error("Failed to fetch standings");
     const data = await response.json();
@@ -826,6 +845,32 @@ export const validateTournament = (data) => {
  */
 export const getRegistrationFormFields = async (tournamentId) => {
   try {
+    const normalizeFieldType = (rawType) => {
+      const normalized = String(rawType || "")
+        .trim()
+        .toLowerCase();
+
+      if (
+        normalized.includes("display image") ||
+        normalized.includes("qr") ||
+        normalized.includes("payment qr")
+      ) {
+        return "Display Image";
+      }
+
+      const map = {
+        text: "Text",
+        email: "Email",
+        number: "Number",
+        date: "Date",
+        dropdown: "Dropdown",
+        textarea: "Text Area",
+        "text area": "Text Area",
+      };
+
+      return map[normalized] || rawType || "Text";
+    };
+
     const response = await fetch(
       `${API_URL}/tournaments/${tournamentId}/registration-form-fields`,
       {
@@ -833,7 +878,16 @@ export const getRegistrationFormFields = async (tournamentId) => {
       },
     );
     if (!response.ok) return [];
-    return await response.json();
+    const fields = await response.json();
+    return Array.isArray(fields)
+      ? fields.map((field, index) => ({
+          ...field,
+          field_type: normalizeFieldType(field.field_type || field.type),
+          field_order:
+            typeof field.field_order === "number" ? field.field_order : index,
+          field_image: field.field_image || "",
+        }))
+      : [];
   } catch (error) {
     console.error("Error fetching registration form fields:", error);
     return [];
@@ -845,6 +899,32 @@ export const getRegistrationFormFields = async (tournamentId) => {
  */
 export const saveRegistrationFormFields = async (tournamentId, fields) => {
   try {
+    const normalizeFieldType = (rawType) => {
+      const normalized = String(rawType || "")
+        .trim()
+        .toLowerCase();
+
+      if (
+        normalized.includes("display image") ||
+        normalized.includes("qr") ||
+        normalized.includes("payment qr")
+      ) {
+        return "Display Image";
+      }
+
+      const map = {
+        text: "Text",
+        email: "Email",
+        number: "Number",
+        date: "Date",
+        dropdown: "Dropdown",
+        textarea: "Text Area",
+        "text area": "Text Area",
+      };
+
+      return map[normalized] || rawType || "Text";
+    };
+
     if (!Array.isArray(fields) || fields.length === 0) {
       throw new Error("Add at least one registration field before saving");
     }
@@ -855,7 +935,8 @@ export const saveRegistrationFormFields = async (tournamentId, fields) => {
         field.label ||
         ""
       ).trim();
-      if (normalizedFieldName.length < 2) {
+      const canonicalType = normalizeFieldType(field.field_type || field.type);
+      if (canonicalType !== "Display Image" && normalizedFieldName.length < 2) {
         throw new Error("Each field name must be at least 2 characters");
       }
     }
@@ -877,7 +958,8 @@ export const saveRegistrationFormFields = async (tournamentId, fields) => {
     for (const field of fields) {
       const payload = {
         field_name: field.field_name || field.label,
-        field_type: field.field_type || field.type,
+        field_type: normalizeFieldType(field.field_type || field.type),
+        field_image: field.field_image || "",
         is_required: field.is_required || field.required || false,
         field_order: field.field_order || fields.indexOf(field),
       };
@@ -1083,7 +1165,7 @@ export const updateMatchResult = async (tournamentId, matchId, result) => {
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify({ result }),
-    }
+    },
   );
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -1098,7 +1180,7 @@ export const regenerateTournamentPairing = async (tournamentId) => {
     {
       method: "POST",
       headers: getAuthHeaders(),
-    }
+    },
   );
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -1113,7 +1195,7 @@ export const finalizeTournamentRound = async (tournamentId, roundNumber) => {
     {
       method: "POST",
       headers: getAuthHeaders(),
-    }
+    },
   );
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

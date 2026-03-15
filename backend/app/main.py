@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from . import models
@@ -18,6 +19,31 @@ load_dotenv(dotenv_path=_BASE_DIR / ".env")
 # Create tables — wrapped so the server starts even if DB is temporarily unreachable
 try:
     Base.metadata.create_all(bind=engine)
+
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "registration_form_fields" in table_names:
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("registration_form_fields")
+        }
+        if "field_image" not in existing_columns:
+            with engine.begin() as conn:
+                dialect_name = conn.dialect.name
+                if dialect_name == "postgresql":
+                    conn.execute(
+                        text(
+                            "ALTER TABLE registration_form_fields ADD COLUMN field_image TEXT")
+                    )
+                elif dialect_name in {"mysql", "mariadb"}:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE registration_form_fields ADD COLUMN field_image LONGTEXT NULL")
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE registration_form_fields ADD COLUMN field_image TEXT")
+                    )
 
     # Ensure all required roles exist
     from sqlalchemy.orm import Session
@@ -87,6 +113,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
