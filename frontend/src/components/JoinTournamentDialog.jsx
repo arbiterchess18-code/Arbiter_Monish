@@ -147,17 +147,15 @@ export function JoinTournamentDialog({
     results: false,
   });
 
-  if (!tournament) return null;
-
-  const tournamentId = tournament.id ?? tournament.tournament_id;
-  const tournamentName = tournament.name ?? tournament.tournament_name;
-  const minRating = tournament.minRating ?? tournament.min_rating;
-  const maxPlayers = tournament.maxPlayers ?? tournament.max_players ?? 64;
-  const startDate = tournament.startDate ?? tournament.start_date;
+  const tournamentId = tournament?.id ?? tournament?.tournament_id;
+  const tournamentName = tournament?.name ?? tournament?.tournament_name;
+  const minRating = tournament?.minRating ?? tournament?.min_rating;
+  const maxPlayers = tournament?.maxPlayers ?? tournament?.max_players ?? 64;
+  const startDate = tournament?.startDate ?? tournament?.start_date;
   const venue =
-    tournament.venue ||
-    tournament.venue_name ||
-    [tournament.city, tournament.state, tournament.country]
+    tournament?.venue ||
+    tournament?.venue_name ||
+    [tournament?.city, tournament?.state, tournament?.country]
       .filter(Boolean)
       .join(", ") ||
     "Online";
@@ -183,6 +181,8 @@ export function JoinTournamentDialog({
     };
     fetchFields();
   }, [open, tournamentId]);
+
+  if (!tournament) return null;
 
   const useCustomRegistration = registrationFields.length > 0;
 

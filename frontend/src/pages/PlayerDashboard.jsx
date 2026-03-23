@@ -253,7 +253,7 @@ const PlayerDashboard = () => {
           )}
         </div>
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
@@ -262,7 +262,7 @@ const PlayerDashboard = () => {
             ))}
           </div>
         ) : myTournaments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {myTournaments.map((t, i) => (
               <div
                 key={t.tournament_id}
@@ -296,7 +296,7 @@ const PlayerDashboard = () => {
           Your Active Engagements
         </h2>
         {activeTournaments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {activeTournaments.map((t, i) => (
               <TournamentCard key={t.id} tournament={t} index={i} />
             ))}

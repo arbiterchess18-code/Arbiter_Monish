@@ -178,7 +178,7 @@ export default function UserHome() {
             View All <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
           {upcomingTournaments.map((t, i) => (
             <TournamentCard
               key={t.id}

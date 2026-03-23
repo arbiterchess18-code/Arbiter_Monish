@@ -200,7 +200,7 @@ export default function ManageTournaments() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
           {tournaments
             .filter((t) => {
               if (filterMode === "all") return true;
@@ -238,7 +238,7 @@ export default function ManageTournaments() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-full text-xs font-medium px-0"
+                        className={`w-full text-xs font-medium px-0 ${isSubArbiterCard ? "col-span-2" : ""}`}
                         onClick={() => navigate(`/tournament/${t.id}`)}
                         title="View tournament details"
                       >

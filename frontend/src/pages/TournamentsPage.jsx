@@ -127,7 +127,7 @@ export default function TournamentsPage() {
           <p className="text-sm mt-1">Try adjusting your filters</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
           {allTournaments.map((t, i) => (
             <div
               key={t.id}

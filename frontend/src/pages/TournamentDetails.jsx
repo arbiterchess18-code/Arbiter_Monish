@@ -883,13 +883,7 @@ export default function TournamentDetails() {
             </CardContent>
           </Card>
 
-          {renderPairingsSummary(
-            pairings.filter(
-              (pairing) => pairing.round_number === selectedRound,
-            ),
-            `Round ${selectedRound || latestRoundWithPairings} Pairings & Results`,
-            "Pairings will appear here once the arbiter generates the round.",
-          )}
+
         </TabsContent>
 
         <TabsContent value="participants" className="mt-4">
@@ -1141,11 +1135,7 @@ export default function TournamentDetails() {
               </CardContent>
             </Card>
 
-            {renderPairingsSummary(
-              latestRoundPairings,
-              `Latest Pairing Results${latestRoundWithPairings ? ` • Round ${latestRoundWithPairings}` : ""}`,
-              "No pairing results available yet for participants to view.",
-            )}
+
           </div>
         </TabsContent>
 
@@ -1551,13 +1541,7 @@ export default function TournamentDetails() {
               </CardContent>
             </Card>
 
-            {renderPairingsSummary(
-              pairings.filter(
-                (pairing) => pairing.round_number === selectedRound,
-              ),
-              `Pairing Results for Round ${selectedRound || latestRoundWithPairings}`,
-              "Standings will update here once results are submitted.",
-            )}
+
           </div>
         </TabsContent>
       </Tabs>
