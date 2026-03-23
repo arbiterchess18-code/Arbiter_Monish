@@ -145,6 +145,7 @@ export default function TournamentViewDetails() {
     const errors = {};
 
     registrationFormFields.forEach((field) => {
+      if (field.field_type === "Display Image") return;
       if (!field.is_required) return;
       const value = registrationFormData[field.field_name];
       if (value === undefined || value === null || `${value}`.trim() === "") {
@@ -259,12 +260,33 @@ export default function TournamentViewDetails() {
 
     return (
       <div key={field.field_id || fieldName} className="space-y-2">
-        <Label>
-          {fieldName}
-          {field.is_required ? (
-            <span className="text-destructive"> *</span>
-          ) : null}
-        </Label>
+        {field.field_type !== "Display Image" ? (
+          <Label>
+            {fieldName}
+            {field.is_required ? (
+              <span className="text-destructive"> *</span>
+            ) : null}
+          </Label>
+        ) : null}
+
+        {field.field_type === "Display Image" && (
+          <div className="space-y-2">
+            {fieldName ? (
+              <p className="text-sm font-medium">{fieldName}</p>
+            ) : null}
+            {field.field_image ? (
+              <img
+                src={field.field_image}
+                alt={fieldName || "Registration helper image"}
+                className="max-h-56 w-auto rounded-md border"
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Registration image will be shown here.
+              </p>
+            )}
+          </div>
+        )}
 
         {field.field_type === "Text" && (
           <Input

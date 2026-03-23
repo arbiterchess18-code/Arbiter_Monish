@@ -136,7 +136,7 @@ class Tournament(Base):
         self.tie_break_config_json = json.dumps(value)
 
     sub_arbiters_json = Column("sub_arbiters", Text, default='[]')
-    
+
     @property
     def sub_arbiters(self):
         if not self.sub_arbiters_json:
@@ -247,6 +247,8 @@ class RegistrationFormField(Base):
     field_name = Column(String(255), nullable=False)
     # Text, Email, Number, Date, Dropdown, Text Area
     field_type = Column(String(50), nullable=False)
+    # Optional image data/url for non-input display blocks (e.g. payment QR)
+    field_image = Column(Text, nullable=True)
     is_required = Column(Boolean, default=False)
     field_order = Column(Integer, default=0)
     created_at = Column(TIMESTAMP, server_default=func.now())

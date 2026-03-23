@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -95,6 +96,58 @@ async def get_my_profile(
         "is_active": current_user.is_active,
         "profile_picture_url": current_user.profile_picture_url,
         "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
+    }
+
+
+@router.get("/me/player-stats")
+async def get_my_player_stats(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get dynamic player dashboard stats for the current user."""
+    total_matches = db.query(func.count(models.Match.match_id)).filter(
+        or_(
+            models.Match.white_player_id == current_user.user_id,
+            models.Match.black_player_id == current_user.user_id,
+        ),
+        models.Match.result.isnot(None),
+    ).scalar() or 0
+
+    wins = db.query(func.count(models.Match.match_id)).filter(
+        or_(
+            (models.Match.white_player_id == current_user.user_id) & (
+                models.Match.result == "1-0"),
+            (models.Match.black_player_id == current_user.user_id) & (
+                models.Match.result == "0-1"),
+        )
+    ).scalar() or 0
+
+    draws = db.query(func.count(models.Match.match_id)).filter(
+        or_(
+            models.Match.white_player_id == current_user.user_id,
+            models.Match.black_player_id == current_user.user_id,
+        ),
+        models.Match.result == "1/2-1/2",
+    ).scalar() or 0
+
+    tournaments = db.query(func.count(func.distinct(models.TournamentRegistration.tournament_id))).filter(
+        models.TournamentRegistration.user_id == current_user.user_id,
+        models.TournamentRegistration.status.in_(
+            ["pending", "approved", "active"]),
+    ).scalar() or 0
+
+    losses = max(total_matches - wins - draws, 0)
+    win_rate = round((wins / total_matches) * 100) if total_matches else 0
+    current_rating = current_user.fide_rating or current_user.national_rating or 0
+
+    return {
+        "currentRating": int(current_rating),
+        "totalMatches": int(total_matches),
+        "wins": int(wins),
+        "draws": int(draws),
+        "losses": int(losses),
+        "winRate": int(win_rate),
+        "totalTournaments": int(tournaments),
     }
 
 

@@ -15,12 +15,18 @@ export function AppLayout({ children }) {
   // Retrieve user data for the header
   const userDataStr = sessionStorage.getItem("userData");
   const userData = userDataStr ? JSON.parse(userDataStr) : null;
-  const firstName = userData?.firstName || userData?.first_name || userData?.name?.split(" ")[0] || "User";
+  const firstName =
+    userData?.firstName ||
+    userData?.first_name ||
+    userData?.name?.split(" ")[0] ||
+    "User";
   const avatarSrc = userData?.profile_picture_url || null;
 
   const handleLogout = async () => {
     try {
-      await apiFetch(`${import.meta.env.VITE_API_URL}/logout`, { method: "POST" });
+      await apiFetch(`${import.meta.env.VITE_API_URL}/logout`, {
+        method: "POST",
+      });
     } catch (e) {
       console.error("Logout error:", e);
     }
@@ -42,13 +48,23 @@ export function AppLayout({ children }) {
               <div className="text-sm font-medium text-foreground hidden sm:block">
                 Hi, {firstName}
               </div>
-              <div className="w-8 h-8 rounded-full overflow-hidden chess-gradient flex items-center justify-center border border-border cursor-pointer">
+              <button
+                type="button"
+                onClick={() => navigate("/profile")}
+                className="w-8 h-8 rounded-full overflow-hidden chess-gradient flex items-center justify-center border border-border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                title="Open profile"
+                aria-label="Open profile"
+              >
                 {avatarSrc ? (
-                  <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={avatarSrc}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <User className="h-4 w-4 text-primary-foreground" />
                 )}
-              </div>
+              </button>
               <ThemeToggle />
               <NotificationBell />
               <Button

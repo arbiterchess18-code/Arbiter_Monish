@@ -2,8 +2,10 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+
 class TournamentRegistrationBase(BaseModel):
     form_data: Dict[str, Any] = {}
+
 
 class TournamentRegistrationCreate(TournamentRegistrationBase):
     is_manual: Optional[bool] = False
@@ -12,6 +14,7 @@ class TournamentRegistrationCreate(TournamentRegistrationBase):
     player_phone: Optional[str] = None
     player_rating: Optional[int] = None
     player_fide_id: Optional[str] = None
+
 
 class TournamentRegistrationStatusUpdate(BaseModel):
     status: str
@@ -25,6 +28,7 @@ class TournamentRegistrationStatusUpdate(BaseModel):
             raise ValueError(
                 "Status must be one of: pending, approved, rejected, active")
         return normalized
+
 
 class TournamentRegistrationResponse(BaseModel):
     registration_id: int
@@ -41,9 +45,11 @@ class TournamentRegistrationResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class RegistrationFormFieldCreate(BaseModel):
     field_name: str
     field_type: str
+    field_image: Optional[str] = None
     is_required: bool = False
     field_order: int = 0
 
@@ -57,10 +63,31 @@ class RegistrationFormFieldCreate(BaseModel):
     @field_validator("field_type")
     @classmethod
     def validate_field_type(cls, value):
-        allowed = {"Text", "Email", "Number", "Date", "Dropdown", "Text Area"}
+        allowed = {
+            "Text",
+            "Email",
+            "Number",
+            "Date",
+            "Dropdown",
+            "Text Area",
+            "Display Image",
+        }
         if value not in allowed:
             raise ValueError("Invalid field type")
         return value
+
+    @field_validator("field_image")
+    @classmethod
+    def validate_field_image(cls, value):
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if len(cleaned) > 180000:
+            raise ValueError("Field image is too large")
+        return cleaned
+
 
 class RegistrationFormFieldResponse(RegistrationFormFieldCreate):
     field_id: int
