@@ -39,19 +39,37 @@ const FIELD_TYPES = [
   { value: "Dropdown", label: "Dropdown", description: "Dropdown select" },
   { value: "Text Area", label: "Text Area", description: "Multi-line text" },
   {
-    value: "Display Image",
-    label: "Display Image",
-    description: "Show static image like payment QR in the registration form",
+    value: "file",
+    label: "File",
+    description: "Screenshot/image upload field",
   },
 ];
 
-const readFileAsDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read image"));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
+const normalizeBuilderFieldType = (rawType) => {
+  const normalized = String(rawType || "")
+    .trim()
+    .toLowerCase();
+  const compact = normalized.replace(/[^a-z]/g, "");
+
+  if (
+    normalized.includes("screenshot") ||
+    normalized.includes("image") ||
+    normalized === "file" ||
+    normalized === "files" ||
+    compact.includes("screenshot") ||
+    compact.includes("image") ||
+    compact === "file" ||
+    compact === "files"
+  ) {
+    return "file";
+  }
+
+  const validTypes = FIELD_TYPES.map((t) => t.value.toLowerCase());
+  return validTypes.includes(normalized)
+    ? FIELD_TYPES.find((t) => t.value.toLowerCase() === normalized)?.value ||
+        "Text"
+    : "Text";
+};
 
 export default function RegistrationFormBuilder() {
   const { id } = useParams();
@@ -78,7 +96,13 @@ export default function RegistrationFormBuilder() {
         // Fetch existing form fields
         const existingFields = await getRegistrationFormFields(id);
         if (existingFields && existingFields.length > 0) {
-          setFields(existingFields);
+          const normalizedFields = existingFields.map((field, index) => ({
+            ...field,
+            field_type: normalizeBuilderFieldType(field.field_type),
+            field_order:
+              typeof field.field_order === "number" ? field.field_order : index,
+          }));
+          setFields(normalizedFields);
         }
       } catch (error) {
         console.error("Error fetching tournament:", error);
@@ -141,7 +165,6 @@ export default function RegistrationFormBuilder() {
       {
         field_name: "",
         field_type: "Text",
-        field_image: "",
         is_required: false,
         field_order: prev.length,
       },
@@ -200,22 +223,12 @@ export default function RegistrationFormBuilder() {
     }
 
     fields.forEach((field, index) => {
-      const isDisplayImage = field.field_type === "Display Image";
-      if (
-        !isDisplayImage &&
-        (!field.field_name || field.field_name.trim().length < 2)
-      ) {
+      if (!field.field_name || field.field_name.trim().length < 2) {
         nextErrors[index] = "Field name is required (minimum 2 characters)";
         valid = false;
       }
-
-      if (isDisplayImage && !field.field_image) {
-        nextErrors[index] = "Upload an image for Display Image field";
-        valid = false;
-      }
-
       const validTypes = FIELD_TYPES.map((t) => t.value);
-      if (!validTypes.includes(field.field_type)) {
+      if (!validTypes.includes(normalizeBuilderFieldType(field.field_type))) {
         nextErrors[index] = "Invalid field type";
         valid = false;
       }
@@ -233,7 +246,13 @@ export default function RegistrationFormBuilder() {
 
     setSaving(true);
     try {
-      await saveRegistrationFormFields(id, fields);
+      const payloadFields = fields.map((field, index) => ({
+        ...field,
+        field_type: normalizeBuilderFieldType(field.field_type),
+        field_order:
+          typeof field.field_order === "number" ? field.field_order : index,
+      }));
+      await saveRegistrationFormFields(id, payloadFields);
       toast.success("Registration form saved successfully!");
       setTimeout(() => {
         navigate(`/arbiter/tournament/${id}/summary`);
@@ -359,16 +378,10 @@ export default function RegistrationFormBuilder() {
                       {/* Field Name */}
                       <div className="md:col-span-4">
                         <Label className="text-xs text-muted-foreground">
-                          {field.field_type === "Display Image"
-                            ? "Image Label"
-                            : "Field Name *"}
+                          Field Name *
                         </Label>
                         <Input
-                          placeholder={
-                            field.field_type === "Display Image"
-                              ? "e.g. Scan to Pay"
-                              : "e.g. Player Rating"
-                          }
+                          placeholder="e.g. Player Rating"
                           value={field.field_name || ""}
                           onChange={(e) =>
                             updateField(index, "field_name", e.target.value)
@@ -405,7 +418,6 @@ export default function RegistrationFormBuilder() {
                       <div className="md:col-span-2 flex items-end gap-2 pb-0.5">
                         <Checkbox
                           id={`required-${index}`}
-                          disabled={field.field_type === "Display Image"}
                           checked={Boolean(field.is_required)}
                           onCheckedChange={(checked) =>
                             updateField(index, "is_required", checked)
@@ -415,9 +427,7 @@ export default function RegistrationFormBuilder() {
                           htmlFor={`required-${index}`}
                           className="text-xs cursor-pointer whitespace-nowrap"
                         >
-                          {field.field_type === "Display Image"
-                            ? "Display Only"
-                            : "Required"}
+                          Required
                         </Label>
                       </div>
 
@@ -444,38 +454,6 @@ export default function RegistrationFormBuilder() {
                       </div>
                     )}
 
-                    {field.field_type === "Display Image" && (
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">
-                          Upload Image (QR / Instruction image)
-                        </Label>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (event) => {
-                            const file = event.target.files?.[0];
-                            if (!file) {
-                              updateField(index, "field_image", "");
-                              return;
-                            }
-                            try {
-                              const dataUrl = await readFileAsDataUrl(file);
-                              updateField(index, "field_image", dataUrl);
-                            } catch {
-                              toast.error("Failed to read selected image");
-                            }
-                          }}
-                        />
-                        {field.field_image ? (
-                          <img
-                            src={field.field_image}
-                            alt={field.field_name || "Display image preview"}
-                            className="h-28 w-28 rounded border object-cover"
-                          />
-                        ) : null}
-                      </div>
-                    )}
-
                     {/* Field Preview */}
                     <div className="bg-muted/50 rounded p-3 border">
                       <div className="space-y-2">
@@ -490,14 +468,6 @@ export default function RegistrationFormBuilder() {
                         <div className="text-xs text-muted-foreground">
                           {getFieldTypeIcon(field.field_type)} field
                         </div>
-                        {field.field_type === "Display Image" &&
-                        field.field_image ? (
-                          <img
-                            src={field.field_image}
-                            alt={field.field_name || "Display image"}
-                            className="mt-2 h-20 w-20 rounded border object-cover"
-                          />
-                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -539,24 +509,19 @@ export default function RegistrationFormBuilder() {
                       <span className="text-destructive">*</span>
                     )}
                   </label>
-                  {field.field_type === "Display Image" ? (
-                    field.field_image ? (
-                      <img
-                        src={field.field_image}
-                        alt={field.field_name || "Registration helper image"}
-                        className="max-h-48 w-auto rounded border"
-                      />
-                    ) : (
-                      <p className="text-xs text-destructive">
-                        No image selected for this display block.
-                      </p>
-                    )
-                  ) : field.field_type === "Text Area" ? (
+                  {field.field_type === "Text Area" ? (
                     <textarea
                       disabled
                       className="w-full px-3 py-2 border rounded-md bg-muted text-sm"
                       placeholder="Sample text area input"
                       rows={3}
+                    />
+                  ) : normalizeBuilderFieldType(field.field_type) === "file" ? (
+                    <input
+                      disabled
+                      type="file"
+                      accept="image/*"
+                      className="w-full px-3 py-2 border rounded-md bg-muted text-sm"
                     />
                   ) : field.field_type === "Dropdown" ? (
                     <select

@@ -225,7 +225,8 @@ class TournamentRegistration(Base):
     # Fields for pairing algorithm
     current_points = Column(Numeric(4, 1), default=0.0)
     seed = Column(Integer)
-    color_history = Column(String(255), default="")  # e.g. "WBW"
+    # Stores serialized form payload / color history
+    color_history = Column(Text, default="")
     bye_received = Column(Boolean, default=False)
 
     tournament = relationship("Tournament", back_populates="registrations")

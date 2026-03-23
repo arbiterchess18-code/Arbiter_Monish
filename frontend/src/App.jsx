@@ -34,6 +34,7 @@ import TournamentViewDetails from "./pages/TournamentViewDetails";
 import ArbitersPage from "./pages/ArbitersPage";
 import ArbiterDetailPage from "./pages/ArbiterDetailPage";
 import LandingPage from "./pages/LandingPage";
+import OAuthSuccess from "./pages/OAuthSuccess";
 import NotFound from "./pages/NotFound";
 import { useRole } from "@/lib/role-context";
 import { Navigate } from "react-router-dom";
@@ -85,6 +86,7 @@ const App = () => {
                 {/* Auth Routes - No Layout */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/oauth-success" element={<OAuthSuccess />} />
 
                 {/* Application Routes - With Layout */}
                 <Route

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+import json
 
 from .... import models
 from ....database import get_db
@@ -9,6 +10,49 @@ from ....schemas.match import PairingResponse, MatchResultUpdate
 from ....services import notification_service
 
 router = APIRouter()
+
+
+def _decode_form_data(raw_value: Any) -> Dict[str, Any]:
+    if isinstance(raw_value, dict):
+        return raw_value
+    if not raw_value:
+        return {}
+    try:
+        decoded = json.loads(raw_value)
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def _extract_display_name(form_data: Dict[str, Any], fallback_name: str) -> str:
+    if not isinstance(form_data, dict):
+        return fallback_name
+
+    candidate_keys = [
+        "name",
+        "full name",
+        "full_name",
+        "player name",
+        "player_name",
+    ]
+    lowered_map = {str(key).strip().lower(): value for key,
+                   value in form_data.items()}
+
+    for key in candidate_keys:
+        value = lowered_map.get(key)
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned and not cleaned.startswith("data:image"):
+                return cleaned
+
+    for key, value in lowered_map.items():
+        if "name" in key and isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned and not cleaned.startswith("data:image"):
+                return cleaned
+
+    return fallback_name
+
 
 @router.post("/{tournament_id}/matches/{match_id}/result")
 async def submit_match_result(
@@ -45,7 +89,7 @@ async def submit_match_result(
         models.TournamentRegistration.tournament_id == tournament_id,
         models.TournamentRegistration.user_id == match.white_player_id
     ).first()
-    
+
     black_reg = db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
         models.TournamentRegistration.user_id == match.black_player_id
@@ -65,15 +109,19 @@ async def submit_match_result(
     # Revert old points
     if old_result:
         if white_reg:
-            white_reg.current_points = float(white_reg.current_points or 0) - get_points(old_result, "white")
+            white_reg.current_points = float(
+                white_reg.current_points or 0) - get_points(old_result, "white")
         if black_reg:
-            black_reg.current_points = float(black_reg.current_points or 0) - get_points(old_result, "black")
+            black_reg.current_points = float(
+                black_reg.current_points or 0) - get_points(old_result, "black")
 
     # Apply new points
     if white_reg:
-        white_reg.current_points = float(white_reg.current_points or 0) + get_points(new_result, "white")
+        white_reg.current_points = float(
+            white_reg.current_points or 0) + get_points(new_result, "white")
     if black_reg:
-        black_reg.current_points = float(black_reg.current_points or 0) + get_points(new_result, "black")
+        black_reg.current_points = float(
+            black_reg.current_points or 0) + get_points(new_result, "black")
 
     db.commit()
 
@@ -88,6 +136,7 @@ async def submit_match_result(
         db.commit()
 
     return {"message": "Result updated successfully", "white_points": float(white_reg.current_points if white_reg else 0)}
+
 
 @router.get("/{tournament_id}/pairings", response_model=PairingResponse)
 async def get_tournament_pairings(
@@ -104,6 +153,18 @@ async def get_tournament_pairings(
         models.TournamentRegistration.tournament_id == tournament_id,
         models.TournamentRegistration.status.in_(["approved", "active"])
     ).all()
+
+    registration_display_names = {}
+    for reg in approved_registrations:
+        form_data = _decode_form_data(reg.color_history)
+        user = db.query(models.User).filter(
+            models.User.user_id == reg.user_id).first()
+        if not user:
+            continue
+        fallback = (
+            f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username)
+        registration_display_names[reg.user_id] = _extract_display_name(
+            form_data, fallback)
 
     rounds = db.query(models.Round).filter(
         models.Round.tournament_id == tournament_id
@@ -125,9 +186,17 @@ async def get_tournament_pairings(
                 "round_number": round_item.round_number,
                 "board_number": match.board_number,
                 "white_player_id": match.white_player_id,
-                "white_player_name": (f"{white_player.first_name or ''} {white_player.last_name or ''}".strip() if white_player else None) or (white_player.username if white_player else None),
+                "white_player_name": registration_display_names.get(
+                    match.white_player_id,
+                    (f"{white_player.first_name or ''} {white_player.last_name or ''}".strip(
+                    ) if white_player else None) or (white_player.username if white_player else None),
+                ),
                 "black_player_id": match.black_player_id,
-                "black_player_name": (f"{black_player.first_name or ''} {black_player.last_name or ''}".strip() if black_player else None) or (black_player.username if black_player else None),
+                "black_player_name": registration_display_names.get(
+                    match.black_player_id,
+                    (f"{black_player.first_name or ''} {black_player.last_name or ''}".strip(
+                    ) if black_player else None) or (black_player.username if black_player else None),
+                ),
                 "result": match.result,
             })
 
@@ -135,11 +204,12 @@ async def get_tournament_pairings(
         "approved_participants": len(approved_registrations),
         "current_round": tournament.current_round or 0,
         "round_status": "not_started" if len(rounds) == 0 else "in_progress",
-        "rounds_info": [{ "round_number": r.round_number, "is_submitted": r.is_submitted } for r in rounds],
+        "rounds_info": [{"round_number": r.round_number, "is_submitted": r.is_submitted} for r in rounds],
         "pairing_system": tournament.pairing_system,
         "tie_breaker_rules": tournament.tie_break_config or ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Number of Wins", "Direct Encounter"],
         "pairings": pairings,
     }
+
 
 @router.post("/{tournament_id}/rounds/{round_number}/finalize")
 async def finalize_round(
@@ -228,7 +298,8 @@ def _generate_pairings_for_round(db: Session, tournament: models.Tournament, rou
     index = 0
     while index < len(sorted_regs):
         white_reg = sorted_regs[index]
-        black_reg = sorted_regs[index + 1] if index + 1 < len(sorted_regs) else None
+        black_reg = sorted_regs[index + 1] if index + \
+            1 < len(sorted_regs) else None
 
         new_match = models.Match(
             tournament_id=tournament.tournament_id,
@@ -236,16 +307,18 @@ def _generate_pairings_for_round(db: Session, tournament: models.Tournament, rou
             white_player_id=white_reg.user_id,
             black_player_id=black_reg.user_id if black_reg else None,
             board_number=board_number,
-            result="1-0" if not black_reg else None, # BYE gives 1 point
+            result="1-0" if not black_reg else None,  # BYE gives 1 point
         )
         db.add(new_match)
 
         # Update cache points for BYE (Standings will recalculate anyway, but for immediate UI consistency)
         if not black_reg:
-            white_reg.current_points = float(white_reg.current_points or 0) + 1.0
+            white_reg.current_points = float(
+                white_reg.current_points or 0) + 1.0
 
         board_number += 1
         index += 2
+
 
 @router.post("/{tournament_id}/pairings/start")
 async def start_pairing_round(
@@ -289,7 +362,7 @@ async def start_pairing_round(
         ).first()
         if prev_round and not prev_round.is_submitted:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Round {tournament.current_round} must be finalized before starting Round {next_round}."
             )
 
@@ -300,7 +373,8 @@ async def start_pairing_round(
     db.add(round_record)
     db.flush()
 
-    _generate_pairings_for_round(db, tournament, round_record, approved_registrations)
+    _generate_pairings_for_round(
+        db, tournament, round_record, approved_registrations)
 
     tournament.current_round = next_round
     if tournament.status == "upcoming":
@@ -316,6 +390,7 @@ async def start_pairing_round(
     db.commit()
 
     return {"message": f"Round {next_round} pairings generated successfully"}
+
 
 @router.post("/{tournament_id}/pairings/regenerate")
 async def regenerate_pairing_round(
@@ -334,38 +409,44 @@ async def regenerate_pairing_round(
             status_code=403, detail="Only tournament creator or admin can regenerate pairings")
 
     if not tournament.current_round or tournament.current_round == 0:
-        print(f"❌ Regenerate failed: current_round is {tournament.current_round}")
-        raise HTTPException(status_code=400, detail="No round exists to regenerate")
+        print(
+            f"❌ Regenerate failed: current_round is {tournament.current_round}")
+        raise HTTPException(
+            status_code=400, detail="No round exists to regenerate")
 
     round_item = db.query(models.Round).filter(
         models.Round.tournament_id == tournament_id,
         models.Round.round_number == tournament.current_round
     ).first()
-    
+
     if not round_item:
-        print(f"❌ Regenerate failed: Round record for {tournament.current_round} not found in DB")
+        print(
+            f"❌ Regenerate failed: Round record for {tournament.current_round} not found in DB")
         raise HTTPException(status_code=404, detail="Current round not found")
-        
+
     if round_item.is_submitted:
-        print(f"❌ Regenerate failed: Round {tournament.current_round} is already submitted")
-        raise HTTPException(status_code=400, detail="Cannot regenerate pairings after round results are submitted")
+        print(
+            f"❌ Regenerate failed: Round {tournament.current_round} is already submitted")
+        raise HTTPException(
+            status_code=400, detail="Cannot regenerate pairings after round results are submitted")
 
     # Delete existing matches for this round
-    db.query(models.Match).filter(models.Match.round_id == round_item.round_id).delete()
+    db.query(models.Match).filter(
+        models.Match.round_id == round_item.round_id).delete()
     db.commit()
-    
+
     # Refresh registrations to clear BYE points if they exist
     # (Actually, points are best recalculated from scratch, but let's be safe)
     from ...logic.standings import calculate_standings
     _, standings_data = calculate_standings(db, tournament_id)
-    
+
     # Sync current_points cache on registrations
     reg_map = {reg.user_id: reg for reg in db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id).all()}
     for entry in standings_data:
         if entry["user_id"] in reg_map:
             reg_map[entry["user_id"]].current_points = entry["points"]
-    
+
     db.commit()
 
     approved_registrations = db.query(models.TournamentRegistration).filter(
@@ -373,10 +454,12 @@ async def regenerate_pairing_round(
         models.TournamentRegistration.status.in_(["approved", "active"])
     ).all()
 
-    _generate_pairings_for_round(db, tournament, round_item, approved_registrations)
+    _generate_pairings_for_round(
+        db, tournament, round_item, approved_registrations)
     db.commit()
 
     return {"message": f"Round {tournament.current_round} pairings regenerated successfully"}
+
 
 @router.post("/{tournament_id}/seed-players")
 async def seed_players(
@@ -395,14 +478,16 @@ async def seed_players(
 
     # Create 8 dummy players
     test_players = [
-        {"username": f"test_player_{i}_{tournament_id}", "email": f"test_{i}_{tournament_id}@example.com", "name": f"Test Player {i}"}
+        {"username": f"test_player_{i}_{tournament_id}",
+            "email": f"test_{i}_{tournament_id}@example.com", "name": f"Test Player {i}"}
         for i in range(1, 9)
     ]
 
     seeded_count = 0
     for p_data in test_players:
         # Check if user exists
-        user = db.query(models.User).filter(models.User.email == p_data["email"]).first()
+        user = db.query(models.User).filter(
+            models.User.email == p_data["email"]).first()
         if not user:
             user = models.User(
                 username=p_data["username"],

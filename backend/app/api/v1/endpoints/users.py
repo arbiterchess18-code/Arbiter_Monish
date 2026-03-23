@@ -162,7 +162,7 @@ async def get_my_achievements(
 ):
     """Aggregate match stats and return unlocked achievement titles"""
     from sqlalchemy import or_, and_
-    
+
     # Fetch all matches for this user
     matches = db.query(models.Match, models.Tournament).join(
         models.Tournament, models.Match.tournament_id == models.Tournament.tournament_id
@@ -192,7 +192,7 @@ async def get_my_achievements(
 
     for match, tournament in matches:
         is_white = match.white_player_id == current_user.user_id
-        
+
         # Check result
         if match.result == "1-0":
             if is_white:
@@ -227,7 +227,8 @@ async def get_my_achievements(
         if tournament.event_type and "standard" in tournament.event_type.lower():
             stats["classical_games"] += 1
 
-    stats["win_rate"] = int((stats["total_wins"] / stats["total_matches"]) * 100) if stats["total_matches"] > 0 else 0
+    stats["win_rate"] = int((stats["total_wins"] / stats["total_matches"])
+                            * 100) if stats["total_matches"] > 0 else 0
     stats["current_rating"] = current_user.fide_rating or 0
 
     unlocked_achievement_ids = []
@@ -253,6 +254,71 @@ async def get_my_achievements(
         "unlocked": unlocked_achievement_ids,
         "stats": stats
     }
+
+
+@router.get("/me/registrations")
+async def get_my_registrations(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get list of tournament IDs the current user has registered for"""
+    registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.user_id == current_user.user_id,
+        models.TournamentRegistration.status.in_(
+            ["pending", "approved", "active"])
+    ).all()
+    return [r.tournament_id for r in registrations]
+
+
+@router.get("/me/tournaments")
+async def get_my_tournaments(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get full tournament details for tournaments the current user has registered for"""
+    registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.user_id == current_user.user_id,
+        models.TournamentRegistration.status.in_(
+            ["pending", "approved", "active"])
+    ).all()
+
+    result = []
+    for reg in registrations:
+        t = db.query(models.Tournament).filter(
+            models.Tournament.tournament_id == reg.tournament_id
+        ).first()
+        if not t:
+            continue
+        registered_count = db.query(models.TournamentRegistration).filter(
+            models.TournamentRegistration.tournament_id == t.tournament_id,
+            models.TournamentRegistration.status.in_(["approved", "active"])
+        ).count()
+        result.append({
+            "tournament_id": t.tournament_id,
+            "tournament_name": t.tournament_name,
+            "id": t.tournament_id,
+            "name": t.tournament_name,
+            "status": t.status,
+            "pairing_system": t.pairing_system,
+            "pairingSystem": t.pairing_system,
+            "is_rated": t.is_rated,
+            "isRated": t.is_rated,
+            "time_control": t.time_control,
+            "timeControl": t.time_control,
+            "start_date": str(t.start_date) if t.start_date else None,
+            "startDate": str(t.start_date) if t.start_date else None,
+            "max_players": t.max_players,
+            "maxPlayers": t.max_players,
+            "venue_name": t.venue_name,
+            "city": t.city,
+            "rounds": t.rounds,
+            "current_round": t.current_round,
+            "currentRound": t.current_round,
+            "registered_count": registered_count,
+            "registration_status": reg.status,
+            "entry_fee": t.entry_fee,
+        })
+    return result
 
 
 @router.get("/arbiters")

@@ -27,6 +27,40 @@ const handleResponse = async (response) => {
 };
 
 /**
+ * Get list of tournament IDs the current user has registered for
+ */
+export const getMyRegisteredTournamentIds = async () => {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) return [];
+    const response = await fetch(`${API_URL}/users/me/registrations`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return [];
+    return await response.json();
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Get full tournament details for tournaments the current user has registered for
+ */
+export const getMyTournaments = async () => {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) return [];
+    const response = await fetch(`${API_URL}/users/me/tournaments`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return [];
+    return await response.json();
+  } catch {
+    return [];
+  }
+};
+
+/**
  * Get the current user's profile
  */
 export const getUserProfile = async () => {
@@ -395,6 +429,75 @@ export const unregisterPlayer = async (tournamentId, playerId) => {
   // Mocking for now, as there's no backend endpoint for this yet
   console.warn("unregisterPlayer is not yet implemented on the backend");
   return true;
+};
+
+/**
+ * Import multiple participants from Excel data
+ * Bulk registration of players from spreadsheet
+ */
+export const importParticipantsFromExcel = async (
+  tournamentId,
+  participantsData,
+) => {
+  const payload = {
+    participants: participantsData.map((participant) => ({
+      player_name: participant.playerName,
+      player_email: participant.email,
+      player_rating: participant.rating || 0,
+      registered_date: participant.registeredDate,
+      is_manual: true,
+    })),
+  };
+
+  const response = await fetch(
+    `${API_URL}/tournaments/${tournamentId}/registrations/bulk-import`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    // Fallback path for older/running backend instances that don't expose bulk-import yet.
+    if (response.status === 404) {
+      const imported = [];
+      const errors = [];
+
+      for (const participant of participantsData) {
+        try {
+          const reg = await manualRegisterPlayer(tournamentId, {
+            fullName: participant.playerName,
+            email: participant.email,
+            rating: participant.rating,
+            phone: "",
+            fideId: "",
+          });
+          imported.push(reg);
+        } catch (error) {
+          errors.push({
+            player_name: participant.playerName,
+            error: error.message || "Failed to import participant",
+          });
+        }
+      }
+
+      return {
+        total_processed: participantsData.length,
+        successful: imported.length,
+        failed: errors.length,
+        imported,
+        errors,
+      };
+    }
+
+    const errorData = await response.json();
+    throw new Error(
+      errorData.detail || "Failed to import participants from Excel",
+    );
+  }
+
+  return await response.json();
 };
 
 // ==================== SWISS PAIRING SYSTEM ====================
@@ -849,13 +952,20 @@ export const getRegistrationFormFields = async (tournamentId) => {
       const normalized = String(rawType || "")
         .trim()
         .toLowerCase();
+      const compact = normalized.replace(/[^a-z]/g, "");
 
       if (
-        normalized.includes("display image") ||
-        normalized.includes("qr") ||
-        normalized.includes("payment qr")
+        normalized.includes("screenshot") ||
+        normalized.includes("image") ||
+        normalized.includes("file upload") ||
+        normalized === "file" ||
+        normalized === "files" ||
+        compact.includes("screenshot") ||
+        compact.includes("image") ||
+        compact === "file" ||
+        compact === "files"
       ) {
-        return "Display Image";
+        return "Image";
       }
 
       const map = {
@@ -868,7 +978,7 @@ export const getRegistrationFormFields = async (tournamentId) => {
         "text area": "Text Area",
       };
 
-      return map[normalized] || rawType || "Text";
+      return map[normalized] || map[compact] || "Text";
     };
 
     const response = await fetch(
@@ -882,10 +992,9 @@ export const getRegistrationFormFields = async (tournamentId) => {
     return Array.isArray(fields)
       ? fields.map((field, index) => ({
           ...field,
-          field_type: normalizeFieldType(field.field_type || field.type),
+          field_type: normalizeFieldType(field?.field_type || field?.type),
           field_order:
-            typeof field.field_order === "number" ? field.field_order : index,
-          field_image: field.field_image || "",
+            typeof field?.field_order === "number" ? field.field_order : index,
         }))
       : [];
   } catch (error) {
@@ -899,32 +1008,6 @@ export const getRegistrationFormFields = async (tournamentId) => {
  */
 export const saveRegistrationFormFields = async (tournamentId, fields) => {
   try {
-    const normalizeFieldType = (rawType) => {
-      const normalized = String(rawType || "")
-        .trim()
-        .toLowerCase();
-
-      if (
-        normalized.includes("display image") ||
-        normalized.includes("qr") ||
-        normalized.includes("payment qr")
-      ) {
-        return "Display Image";
-      }
-
-      const map = {
-        text: "Text",
-        email: "Email",
-        number: "Number",
-        date: "Date",
-        dropdown: "Dropdown",
-        textarea: "Text Area",
-        "text area": "Text Area",
-      };
-
-      return map[normalized] || rawType || "Text";
-    };
-
     if (!Array.isArray(fields) || fields.length === 0) {
       throw new Error("Add at least one registration field before saving");
     }
@@ -935,53 +1018,141 @@ export const saveRegistrationFormFields = async (tournamentId, fields) => {
         field.label ||
         ""
       ).trim();
-      const canonicalType = normalizeFieldType(field.field_type || field.type);
-      if (canonicalType !== "Display Image" && normalizedFieldName.length < 2) {
+      if (normalizedFieldName.length < 2) {
         throw new Error("Each field name must be at least 2 characters");
       }
     }
 
-    // First, delete all existing fields
-    const existingFields = await getRegistrationFormFields(tournamentId);
-    for (const field of existingFields) {
-      await fetch(
-        `${API_URL}/tournaments/${tournamentId}/registration-form-fields/${field.field_id}`,
-        {
-          method: "DELETE",
-          headers: getAuthHeaders(),
-        },
-      );
-    }
+    const normalizeFieldType = (rawType) => {
+      const normalized = String(rawType || "")
+        .trim()
+        .toLowerCase();
+      const compact = normalized.replace(/[^a-z]/g, "");
 
-    // Then add new fields
-    const savedFields = [];
-    for (const field of fields) {
-      const payload = {
-        field_name: field.field_name || field.label,
-        field_type: normalizeFieldType(field.field_type || field.type),
-        field_image: field.field_image || "",
-        is_required: field.is_required || field.required || false,
-        field_order: field.field_order || fields.indexOf(field),
-      };
-
-      const response = await fetch(
-        `${API_URL}/tournaments/${tournamentId}/registration-form-fields`,
-        {
-          method: "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to save field: ${field.field_name}`);
+      if (
+        normalized.includes("screenshot") ||
+        normalized.includes("image") ||
+        normalized.includes("file upload") ||
+        compact.includes("screenshot") ||
+        compact.includes("image")
+      ) {
+        return "Image";
       }
 
-      const savedField = await response.json();
-      savedFields.push(savedField);
+      const map = {
+        text: "Text",
+        email: "Email",
+        number: "Number",
+        date: "Date",
+        dropdown: "Dropdown",
+        textarea: "Text Area",
+        "text area": "Text Area",
+        image: "Image",
+        images: "Image",
+        file: "Image",
+        files: "Image",
+        "file upload": "Image",
+        screenshot: "Image",
+        screenshots: "Image",
+      };
+      return map[normalized] || map[compact] || null;
+    };
+
+    const payload = fields.map((field, index) => {
+      const canonicalType = normalizeFieldType(field.field_type || field.type);
+      if (!canonicalType) {
+        throw new Error(
+          `Invalid field type for ${field.field_name || field.label || `field ${index + 1}`}. Use text, email, number, date, dropdown, text area, image, or file.`,
+        );
+      }
+
+      return {
+        field_name: (field.field_name || field.label || "").trim(),
+        field_type: canonicalType,
+        is_required: Boolean(field.is_required ?? field.required ?? false),
+        field_order:
+          typeof field.field_order === "number" ? field.field_order : index,
+      };
+    });
+
+    const baseUrl = `${API_URL}/tournaments/${tournamentId}/registration-form-fields`;
+    const urls = [baseUrl, `${baseUrl}/`];
+
+    const requestJson = async (url, method, body) => {
+      return await fetch(url, {
+        method,
+        headers: getAuthHeaders(),
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    };
+
+    let response = await requestJson(urls[0], "PUT", payload);
+    if (!response.ok && (response.status === 404 || response.status === 405)) {
+      response = await requestJson(urls[1], "PUT", payload);
     }
 
-    return savedFields;
+    // Backward compatibility: some backend instances expose only GET/POST.
+    if (response.status === 405 || response.status === 404) {
+      const existingFields = await getRegistrationFormFields(tournamentId);
+
+      // Best-effort cleanup; ignore failures for older servers without DELETE.
+      for (const field of existingFields) {
+        const deleteBase = `${API_URL}/tournaments/${tournamentId}/registration-form-fields/${field.field_id}`;
+        await fetch(deleteBase, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        }).catch(() => null);
+        await fetch(`${deleteBase}/`, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        }).catch(() => null);
+      }
+
+      const created = [];
+      for (const fieldPayload of payload) {
+        let createResponse = await requestJson(urls[0], "POST", fieldPayload);
+        if (
+          !createResponse.ok &&
+          (createResponse.status === 404 || createResponse.status === 405)
+        ) {
+          createResponse = await requestJson(urls[1], "POST", fieldPayload);
+        }
+
+        if (!createResponse.ok) {
+          const createErrorData = await createResponse.json().catch(() => ({}));
+          const createDetail =
+            typeof createErrorData?.detail === "string"
+              ? createErrorData.detail
+              : Array.isArray(createErrorData?.detail)
+                ? createErrorData.detail
+                    .map((d) => d?.msg || JSON.stringify(d))
+                    .join(", ")
+                : "Unknown validation error";
+          throw new Error(
+            `Failed to save registration form fields (${createDetail})`,
+          );
+        }
+
+        created.push(await createResponse.json());
+      }
+
+      return created;
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const detail =
+        typeof errorData?.detail === "string"
+          ? errorData.detail
+          : Array.isArray(errorData?.detail)
+            ? errorData.detail
+                .map((d) => d?.msg || JSON.stringify(d))
+                .join(", ")
+            : "Unknown validation error";
+      throw new Error(`Failed to save registration form fields (${detail})`);
+    }
+
+    return await response.json();
   } catch (error) {
     console.error("Error saving registration form fields:", error);
     throw error;

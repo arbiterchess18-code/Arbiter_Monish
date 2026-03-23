@@ -26,6 +26,11 @@ const Login = () => {
 
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
 
+  const handleGoogleLogin = () => {
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    window.location.href = `${apiUrl}/auth/google/login?mode=login`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -111,8 +116,12 @@ const Login = () => {
             <h1 className="login__title">Welcome Back 👋</h1>
             <p className="login__description">Please enter your details.</p>
 
-            <button className="login__button-border">
-              <i className="ri-apple-fill"></i> Sign in with Apple
+            <button
+              type="button"
+              className="login__button-border"
+              onClick={handleGoogleLogin}
+            >
+              <i className="ri-google-fill"></i> Continue with Google
             </button>
           </div>
 

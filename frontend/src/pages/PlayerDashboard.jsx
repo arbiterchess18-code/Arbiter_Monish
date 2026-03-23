@@ -9,21 +9,28 @@ import {
   BarChart3,
   Target,
   Zap,
+  CalendarCheck,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { apiFetch } from "@/lib/api";
+import { getMyTournaments } from "@/lib/tournament-service";
+import { useNavigate } from "react-router-dom";
 
 const PlayerDashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [tournaments, setTournaments] = useState([]);
+  const [myTournaments, setMyTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [statsRes, tournamentsRes] = await Promise.all([
+        const [statsRes, tournamentsRes, myTourns] = await Promise.all([
           apiFetch(`${import.meta.env.VITE_API_URL}/users/me/player-stats`),
           apiFetch(`${import.meta.env.VITE_API_URL}/tournaments/public`),
+          getMyTournaments(),
         ]);
 
         if (statsRes.ok) {
@@ -33,6 +40,8 @@ const PlayerDashboard = () => {
         if (tournamentsRes.ok) {
           setTournaments(await tournamentsRes.json());
         }
+
+        setMyTournaments(myTourns || []);
       } catch (error) {
         console.error("Failed to load player dashboard data:", error);
       } finally {
@@ -43,42 +52,31 @@ const PlayerDashboard = () => {
     loadData();
   }, []);
 
+  const normalizeTournament = (tournament) => ({
+    ...tournament,
+    id: tournament.tournament_id,
+    name: tournament.tournament_name,
+    pairingSystem: tournament.pairing_system,
+    isRated: tournament.is_rated,
+    timeControl: tournament.time_control,
+    startDate: tournament.start_date,
+    maxPlayers: tournament.max_players,
+    currentRound: tournament.current_round,
+    location: tournament.venue_name,
+  });
+
   const upcomingTournaments = useMemo(
     () =>
       tournaments
         .filter((t) => t.status === "upcoming" || t.status === "published")
-        .map((t) => ({
-          ...t,
-          id: t.tournament_id,
-          name: t.tournament_name,
-          pairingSystem: t.pairing_system,
-          isRated: t.is_rated,
-          timeControl: t.time_control,
-          startDate: t.start_date,
-          maxPlayers: t.max_players,
-          currentRound: t.current_round,
-          location: t.venue_name,
-        }))
+        .map(normalizeTournament)
         .slice(0, 3),
     [tournaments],
   );
 
   const activeTournaments = useMemo(
     () =>
-      tournaments
-        .filter((t) => t.status === "active")
-        .map((t) => ({
-          ...t,
-          id: t.tournament_id,
-          name: t.tournament_name,
-          pairingSystem: t.pairing_system,
-          isRated: t.is_rated,
-          timeControl: t.time_control,
-          startDate: t.start_date,
-          maxPlayers: t.max_players,
-          currentRound: t.current_round,
-          location: t.venue_name,
-        })),
+      tournaments.filter((t) => t.status === "active").map(normalizeTournament),
     [tournaments],
   );
 
@@ -134,7 +132,6 @@ const PlayerDashboard = () => {
         </div>
       </div>
 
-      {/* Primary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Current Rating"
@@ -169,7 +166,6 @@ const PlayerDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Live Performance Summary */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -211,7 +207,6 @@ const PlayerDashboard = () => {
           </div>
         </motion.div>
 
-        {/* Quick Actions / Tips */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -247,13 +242,61 @@ const PlayerDashboard = () => {
         </motion.div>
       </div>
 
-      {/* Tournaments Participation */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <CalendarCheck className="h-5 w-5 text-primary" />
+          <h2 className="text-2xl font-display font-bold">My Events</h2>
+          {myTournaments.length > 0 && (
+            <span className="ml-1 text-xs bg-primary/10 text-primary font-semibold rounded-full px-2 py-0.5">
+              {myTournaments.length}
+            </span>
+          )}
+        </div>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-[240px] rounded-xl bg-muted/30 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : myTournaments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+            {myTournaments.map((t, i) => (
+              <div
+                key={t.tournament_id}
+                className="cursor-pointer h-full"
+                onClick={() => navigate(`/tournament/${t.tournament_id}`)}
+              >
+                <TournamentCard
+                  tournament={t}
+                  index={i}
+                  isParticipating
+                  hideActions
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-10 rounded-2xl border border-dashed border-border text-center text-muted-foreground">
+            <CalendarCheck className="h-8 w-8 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">
+              You haven&apos;t joined any tournaments yet.
+            </p>
+            <p className="text-sm mt-1">
+              Browse the Tournaments page to find and register.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="space-y-6">
         <h2 className="text-2xl font-display font-bold">
           Your Active Engagements
         </h2>
         {activeTournaments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
             {activeTournaments.map((t, i) => (
               <TournamentCard key={t.id} tournament={t} index={i} />
             ))}
@@ -267,7 +310,6 @@ const PlayerDashboard = () => {
         )}
       </div>
 
-      {/* Suggested for You */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-display font-bold">Suggested for You</h2>

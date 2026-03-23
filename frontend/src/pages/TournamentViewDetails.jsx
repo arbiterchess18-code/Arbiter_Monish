@@ -48,6 +48,119 @@ import { useRole } from "@/lib/role-context";
 
 const DEFAULT_TABS = ["overview", "pairings"];
 
+const estimateDataUrlBytes = (dataUrl) => {
+  const base64 = String(dataUrl || "").split(",")[1] || "";
+  return Math.floor((base64.length * 3) / 4);
+};
+
+const compressImageToDataUrl = (
+  file,
+  maxDimension = 640,
+  targetBytes = 45000,
+) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Invalid image file"));
+      img.onload = () => {
+        const scale = Math.min(
+          1,
+          maxDimension / Math.max(img.width, img.height),
+        );
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Unable to process image"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const qualities = [0.75, 0.6, 0.5, 0.4, 0.3];
+        let output = canvas.toDataURL("image/jpeg", qualities[0]);
+        for (const q of qualities) {
+          const candidate = canvas.toDataURL("image/jpeg", q);
+          output = candidate;
+          if (estimateDataUrlBytes(candidate) <= targetBytes) break;
+        }
+
+        resolve(output);
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+
+const normalizeCustomFieldType = (rawType) => {
+  const normalized = String(rawType || "")
+    .trim()
+    .toLowerCase();
+  const compact = normalized.replace(/[^a-z]/g, "");
+
+  if (
+    normalized.includes("screenshot") ||
+    normalized.includes("image") ||
+    normalized.includes("file upload") ||
+    normalized === "file" ||
+    normalized === "files" ||
+    compact.includes("screenshot") ||
+    compact.includes("image") ||
+    compact === "file" ||
+    compact === "files"
+  ) {
+    return "Image";
+  }
+
+  const map = {
+    text: "Text",
+    email: "Email",
+    number: "Number",
+    date: "Date",
+    dropdown: "Dropdown",
+    textarea: "Text Area",
+    "text area": "Text Area",
+  };
+
+  return map[normalized] || map[compact] || "Text";
+};
+
+const resolveRegistrationDisplayName = (registration) => {
+  const explicitName = String(registration?.user_name || "").trim();
+  if (explicitName) return explicitName;
+
+  const formData = registration?.form_data;
+  if (!formData || typeof formData !== "object") return "Unnamed Player";
+
+  const loweredMap = Object.entries(formData).reduce((acc, [key, value]) => {
+    acc[String(key).trim().toLowerCase()] = value;
+    return acc;
+  }, {});
+
+  const candidateKeys = [
+    "name",
+    "full name",
+    "full_name",
+    "player name",
+    "player_name",
+  ];
+
+  for (const key of candidateKeys) {
+    const value = loweredMap[key];
+    if (typeof value === "string") {
+      const cleaned = value.trim();
+      if (cleaned && !cleaned.startsWith("data:image")) return cleaned;
+    }
+  }
+
+  return explicitName || "Unnamed Player";
+};
+
 export default function TournamentViewDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -242,6 +355,7 @@ export default function TournamentViewDetails() {
 
   const renderRegistrationField = (field) => {
     const fieldName = field.field_name;
+    const fieldType = normalizeCustomFieldType(field.field_type || field.type);
     const value = registrationFormData[fieldName] || "";
 
     const onChange = (nextValue) => {
@@ -255,6 +369,30 @@ export default function TournamentViewDetails() {
           delete updated[fieldName];
           return updated;
         });
+      }
+    };
+
+    const onImageChange = async (file) => {
+      if (!file) {
+        onChange("");
+        return;
+      }
+      if (!file.type.startsWith("image/")) {
+        setRegistrationErrors((previous) => ({
+          ...previous,
+          [fieldName]: "Please upload a valid image file",
+        }));
+        return;
+      }
+
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        onChange(compressed);
+      } catch {
+        setRegistrationErrors((previous) => ({
+          ...previous,
+          [fieldName]: "Failed to process image",
+        }));
       }
     };
 
@@ -288,45 +426,65 @@ export default function TournamentViewDetails() {
           </div>
         )}
 
-        {field.field_type === "Text" && (
+        {fieldType === "Text" && (
           <Input
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        {field.field_type === "Email" && (
+        {fieldType === "Email" && (
           <Input
             type="email"
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        {field.field_type === "Number" && (
+        {fieldType === "Number" && (
           <Input
             type="number"
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        {field.field_type === "Date" && (
+        {fieldType === "Date" && (
           <Input
             type="date"
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        {field.field_type === "Dropdown" && (
+        {fieldType === "Dropdown" && (
           <Input
             value={value}
             onChange={(event) => onChange(event.target.value)}
             placeholder="Enter value"
           />
         )}
-        {field.field_type === "Text Area" && (
+        {fieldType === "Text Area" && (
           <Textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
+        )}
+        {fieldType === "Image" && (
+          <div className="space-y-2">
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(event) => onImageChange(event.target.files?.[0])}
+            />
+            <p className="text-xs text-muted-foreground">
+              Upload image up to around 1 MB. It will be optimized
+              automatically.
+            </p>
+            {typeof value === "string" && value.startsWith("data:image") && (
+              <img
+                src={value}
+                alt={`${fieldName} preview`}
+                className="h-24 w-24 rounded-md border object-cover"
+              />
+            )}
+          </div>
         )}
 
         {registrationErrors[fieldName] ? (
@@ -602,8 +760,10 @@ export default function TournamentViewDetails() {
                       key={registration.registration_id}
                       className="border rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap"
                     >
-                      <div>
-                        <p className="font-medium">{registration.user_name}</p>
+                      <div className="min-w-[260px] flex-1">
+                        <p className="font-medium">
+                          {resolveRegistrationDisplayName(registration)}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {registration.user_email}
                         </p>
@@ -613,6 +773,35 @@ export default function TournamentViewDetails() {
                             {registration.status}
                           </span>
                         </p>
+                        {registration.form_data &&
+                        Object.keys(registration.form_data).length > 0 ? (
+                          <div className="mt-2 space-y-1 rounded-md border bg-muted/20 p-2">
+                            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                              Submitted Form Details
+                            </p>
+                            {Object.entries(registration.form_data).map(
+                              ([key, value]) => {
+                                const isImage =
+                                  typeof value === "string" &&
+                                  value.startsWith("data:image");
+                                return (
+                                  <div key={key} className="text-xs">
+                                    <span className="font-medium">{key}: </span>
+                                    {isImage ? (
+                                      <img
+                                        src={value}
+                                        alt={`${key} uploaded`}
+                                        className="mt-1 h-16 w-16 rounded border object-cover"
+                                      />
+                                    ) : (
+                                      <span>{String(value)}</span>
+                                    )}
+                                  </div>
+                                );
+                              },
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -651,7 +840,9 @@ export default function TournamentViewDetails() {
         <TabsContent value="pairings" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Pairings Control</CardTitle>
+              <CardTitle className="text-base">
+                Pairings &amp; Results
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -700,32 +891,184 @@ export default function TournamentViewDetails() {
                 </Button>
               ) : null}
 
-              <div className="space-y-3">
-                {(pairingsData?.pairings || []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No pairings generated yet.
-                  </p>
-                ) : (
-                  pairingsData.pairings.map((pairing) => (
-                    <div
-                      key={pairing.match_id}
-                      className="border rounded-lg p-3 text-sm"
-                    >
-                      <p className="font-medium">
-                        Round {pairing.round_number} • Board{" "}
-                        {pairing.board_number || "-"}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {pairing.white_player_name || "TBD"} vs{" "}
-                        {pairing.black_player_name || "BYE"}
-                      </p>
-                      <p className="text-xs mt-1">
-                        Result: {pairing.result || "Pending"}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
+              {/* Round-by-round pairings */}
+              {(() => {
+                const allPairings = pairingsData?.pairings || [];
+                if (allPairings.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      No pairings generated yet.
+                    </p>
+                  );
+                }
+
+                const currentUserId = (() => {
+                  try {
+                    return JSON.parse(
+                      sessionStorage.getItem("userData") || "{}",
+                    ).user_id;
+                  } catch {
+                    return null;
+                  }
+                })();
+
+                const rounds = {};
+                for (const p of allPairings) {
+                  const r = p.round_number || 0;
+                  if (!rounds[r]) rounds[r] = [];
+                  rounds[r].push(p);
+                }
+                const roundNumbers = Object.keys(rounds)
+                  .map(Number)
+                  .sort((a, b) => a - b);
+
+                const resultLabel = (result) => {
+                  if (!result || result === "Pending")
+                    return { text: "–", cls: "text-muted-foreground" };
+                  if (result === "1-0")
+                    return { text: "1 – 0", cls: "font-semibold" };
+                  if (result === "0-1")
+                    return { text: "0 – 1", cls: "font-semibold" };
+                  if (result === "1/2-1/2")
+                    return { text: "½ – ½", cls: "font-semibold" };
+                  if (result === "Bye")
+                    return { text: "Bye", cls: "text-muted-foreground italic" };
+                  return { text: result, cls: "" };
+                };
+
+                const getMyOutcome = (pairing) => {
+                  if (
+                    !currentUserId ||
+                    !pairing.result ||
+                    pairing.result === "Pending"
+                  )
+                    return null;
+                  const isWhite = pairing.white_player_id === currentUserId;
+                  const isBlack = pairing.black_player_id === currentUserId;
+                  if (!isWhite && !isBlack) return null;
+                  if (pairing.result === "Bye") return "bye";
+                  if (pairing.result === "1-0") return isWhite ? "win" : "loss";
+                  if (pairing.result === "0-1") return isBlack ? "win" : "loss";
+                  if (pairing.result === "1/2-1/2") return "draw";
+                  return null;
+                };
+
+                const outcomeBadge = {
+                  win: "bg-success/15 text-success border-success/30",
+                  loss: "bg-destructive/15 text-destructive border-destructive/30",
+                  draw: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+                  bye: "bg-muted text-muted-foreground border-border",
+                };
+
+                return (
+                  <div className="space-y-6 mt-2">
+                    {roundNumbers.map((roundNum) => {
+                      const roundPairings = rounds[roundNum];
+                      const roundInfo = (pairingsData?.rounds_info || []).find(
+                        (ri) => ri.round_number === roundNum,
+                      );
+                      const isSubmitted = roundInfo?.is_submitted;
+                      return (
+                        <div key={roundNum}>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-semibold text-sm">
+                              Round {roundNum}
+                            </span>
+                            {isSubmitted && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/25 font-medium">
+                                Results Submitted
+                              </span>
+                            )}
+                            <div className="flex-1 h-px bg-border" />
+                          </div>
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-muted/40 text-xs text-muted-foreground">
+                                  <th className="py-2 px-3 text-left font-medium w-10">
+                                    Bd
+                                  </th>
+                                  <th className="py-2 px-3 text-right font-medium">
+                                    White
+                                  </th>
+                                  <th className="py-2 px-3 text-center font-medium w-24">
+                                    Result
+                                  </th>
+                                  <th className="py-2 px-3 text-left font-medium">
+                                    Black
+                                  </th>
+                                  <th className="py-2 px-3 w-16" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {roundPairings.map((pairing) => {
+                                  const isMyGame =
+                                    currentUserId &&
+                                    (pairing.white_player_id ===
+                                      currentUserId ||
+                                      pairing.black_player_id ===
+                                        currentUserId);
+                                  const outcome = getMyOutcome(pairing);
+                                  const { text: resText, cls: resCls } =
+                                    resultLabel(pairing.result);
+                                  return (
+                                    <tr
+                                      key={pairing.match_id}
+                                      className={`border-t border-border/50 transition-colors ${
+                                        isMyGame
+                                          ? "bg-primary/5 hover:bg-primary/8"
+                                          : "hover:bg-muted/30"
+                                      }`}
+                                    >
+                                      <td className="py-2.5 px-3 text-muted-foreground text-xs">
+                                        {pairing.board_number ?? "–"}
+                                      </td>
+                                      <td
+                                        className={`py-2.5 px-3 text-right ${
+                                          pairing.white_player_id ===
+                                          currentUserId
+                                            ? "font-semibold text-primary"
+                                            : ""
+                                        }`}
+                                      >
+                                        {pairing.white_player_name || "TBD"}
+                                      </td>
+                                      <td
+                                        className={`py-2.5 px-3 text-center text-xs tabular-nums ${resCls}`}
+                                      >
+                                        {resText}
+                                      </td>
+                                      <td
+                                        className={`py-2.5 px-3 ${
+                                          pairing.black_player_id ===
+                                          currentUserId
+                                            ? "font-semibold text-primary"
+                                            : ""
+                                        }`}
+                                      >
+                                        {pairing.black_player_name || "BYE"}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        {outcome && (
+                                          <span
+                                            className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold uppercase ${outcomeBadge[outcome]}`}
+                                          >
+                                            {outcome}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

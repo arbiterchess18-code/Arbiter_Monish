@@ -3,8 +3,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from . import models
@@ -20,30 +21,17 @@ load_dotenv(dotenv_path=_BASE_DIR / ".env")
 try:
     Base.metadata.create_all(bind=engine)
 
-    inspector = inspect(engine)
-    table_names = set(inspector.get_table_names())
-    if "registration_form_fields" in table_names:
-        existing_columns = {
-            column["name"] for column in inspector.get_columns("registration_form_fields")
-        }
-        if "field_image" not in existing_columns:
-            with engine.begin() as conn:
-                dialect_name = conn.dialect.name
-                if dialect_name == "postgresql":
-                    conn.execute(
-                        text(
-                            "ALTER TABLE registration_form_fields ADD COLUMN field_image TEXT")
-                    )
-                elif dialect_name in {"mysql", "mariadb"}:
-                    conn.execute(
-                        text(
-                            "ALTER TABLE registration_form_fields ADD COLUMN field_image LONGTEXT NULL")
-                    )
-                else:
-                    conn.execute(
-                        text(
-                            "ALTER TABLE registration_form_fields ADD COLUMN field_image TEXT")
-                    )
+    with engine.begin() as conn:
+        dialect_name = conn.dialect.name
+        if dialect_name == "postgresql":
+            conn.execute(text(
+                "ALTER TABLE tournament_registrations ALTER COLUMN color_history TYPE TEXT"))
+        elif dialect_name in {"mysql", "mariadb"}:
+            conn.execute(text(
+                "ALTER TABLE tournament_registrations MODIFY COLUMN color_history LONGTEXT"))
+        elif dialect_name == "sqlite":
+            # SQLite does not enforce VARCHAR length strictly, so no table rewrite is needed.
+            pass
 
     # Ensure all required roles exist
     from sqlalchemy.orm import Session
@@ -117,7 +105,37 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
-    response = await call_next(request)
+    origin = request.headers.get("origin", "")
+    is_local_origin = origin.startswith(
+        "http://localhost:") or origin.startswith("http://127.0.0.1:")
+
+    def apply_cors_headers(response: Response) -> Response:
+        if is_local_origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = request.headers.get(
+                "access-control-request-headers",
+                "Authorization, Content-Type, Accept, Origin",
+            )
+            response.headers["Vary"] = "Origin"
+        return response
+
+    # Force CORS preflight support for local dev origins.
+    if request.method == "OPTIONS" and is_local_origin:
+        response = Response(status_code=204)
+        return apply_cors_headers(response)
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {type(exc).__name__}"},
+        )
+
+    response = apply_cors_headers(response)
+
     if request.url.path.startswith("/users") or request.url.path.startswith("/api/v1/users"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response

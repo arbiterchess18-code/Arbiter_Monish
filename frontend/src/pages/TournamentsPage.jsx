@@ -11,7 +11,10 @@ import {
 import { Search } from "lucide-react";
 import { TournamentCard } from "@/components/TournamentCard";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
-import { getPublicTournaments } from "@/lib/tournament-service";
+import {
+  getPublicTournaments,
+  getMyRegisteredTournamentIds,
+} from "@/lib/tournament-service";
 import { useNavigate } from "react-router-dom";
 
 export default function TournamentsPage() {
@@ -22,6 +25,13 @@ export default function TournamentsPage() {
   const [joinTournament, setJoinTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [myRegisteredIds, setMyRegisteredIds] = useState(new Set());
+
+  useEffect(() => {
+    getMyRegisteredTournamentIds().then((ids) =>
+      setMyRegisteredIds(new Set(ids)),
+    );
+  }, []);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -34,13 +44,17 @@ export default function TournamentsPage() {
   const loadTournaments = async () => {
     setLoading(true);
     try {
-      const realTournaments = await getPublicTournaments({ search, type: typeFilter, status: statusFilter });
+      const realTournaments = await getPublicTournaments({
+        search,
+        type: typeFilter,
+        status: statusFilter,
+      });
 
       // Standardize IDs for real tournaments
-      const standardizedReal = realTournaments.map(t => ({
+      const standardizedReal = realTournaments.map((t) => ({
         ...t,
         id: t.tournament_id,
-        name: t.tournament_name
+        name: t.tournament_name,
       }));
 
       setAllTournaments(standardizedReal);
@@ -113,18 +127,19 @@ export default function TournamentsPage() {
           <p className="text-sm mt-1">Try adjusting your filters</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
           {allTournaments.map((t, i) => (
             <div
               key={t.id}
               onClick={() => handleCardClick(t)}
-              className="cursor-pointer"
+              className="cursor-pointer h-full"
             >
               <TournamentCard
                 tournament={t}
                 index={i}
                 showJoin
                 onJoin={setJoinTournament}
+                isParticipating={myRegisteredIds.has(t.id)}
               />
             </div>
           ))}

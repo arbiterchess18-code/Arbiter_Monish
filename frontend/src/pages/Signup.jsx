@@ -29,6 +29,12 @@ const Signup = () => {
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
   const toggleConfirm = () => setIsConfirmShown(!isConfirmShown);
 
+  const handleGoogleSignup = () => {
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const params = new URLSearchParams({ mode: "signup", role });
+    window.location.href = `${apiUrl}/auth/google/login?${params.toString()}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -161,7 +167,11 @@ const Signup = () => {
               </select>
             </div>
 
-            <button className="login__button-border">
+            <button
+              type="button"
+              className="login__button-border"
+              onClick={handleGoogleSignup}
+            >
               <i className="ri-google-fill"></i> Sign up with Google
             </button>
           </div>
@@ -246,23 +256,70 @@ const Signup = () => {
               </div>
 
               {/* FIDE ID (Optional) */}
-              <div className="login__box flex-col items-start gap-1" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                  <label htmlFor="fideId" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--title-color)' }}>FIDE ID</label>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-color)', backgroundColor: 'var(--body-color)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--text-color-light)' }}>Optional</span>
+              <div
+                className="login__box flex-col items-start gap-1"
+                style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "100%",
+                    alignItems: "center",
+                  }}
+                >
+                  <label
+                    htmlFor="fideId"
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      color: "var(--title-color)",
+                    }}
+                  >
+                    FIDE ID
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "0.65rem",
+                      fontWeight: 500,
+                      color: "var(--text-color)",
+                      backgroundColor: "var(--body-color)",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      border: "1px solid var(--text-color-light)",
+                    }}
+                  >
+                    Optional
+                  </span>
                 </div>
-                <div style={{ position: 'relative', width: '100%' }}>
+                <div style={{ position: "relative", width: "100%" }}>
                   <input
                     id="fideId"
                     name="fideId"
                     type="text"
                     placeholder="e.g., 1503014"
                     className="login__input"
-                    style={{ paddingLeft: '2rem' }}
+                    style={{ paddingLeft: "2rem" }}
                   />
-                  <i className="ri-id-card-line" style={{ position: 'absolute', left: '0', top: '50%', transform: 'translateY(-50%)', color: 'var(--title-color)' }}></i>
+                  <i
+                    className="ri-id-card-line"
+                    style={{
+                      position: "absolute",
+                      left: "0",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--title-color)",
+                    }}
+                  ></i>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-color)', marginTop: '4px', textAlign: 'left' }}>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-color)",
+                    marginTop: "4px",
+                    textAlign: "left",
+                  }}
+                >
                   Link your FIDE ID to automatically sync your rating & title.
                 </p>
               </div>

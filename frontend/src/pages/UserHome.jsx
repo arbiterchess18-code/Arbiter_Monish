@@ -4,8 +4,15 @@ import { StatCard } from "@/components/StatCard";
 import { TournamentCard } from "@/components/TournamentCard";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
 import {
-  Trophy, Users, DollarSign, ArrowRight, ShieldCheck,
-  BarChart4, Zap, Globe, Github
+  Trophy,
+  Users,
+  DollarSign,
+  ArrowRight,
+  ShieldCheck,
+  BarChart4,
+  Zap,
+  Globe,
+  Github,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -44,7 +51,9 @@ export default function UserHome() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-lg text-muted-foreground leading-relaxed md:w-5/6"
           >
-            A professional platform for organizers and players. Create, manage, and compete in tournaments with professional-grade tools and fair play monitoring.
+            A professional platform for organizers and players. Create, manage,
+            and compete in tournaments with professional-grade tools and fair
+            play monitoring.
           </motion.p>
 
           <motion.div
@@ -53,8 +62,13 @@ export default function UserHome() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="flex flex-wrap gap-4 pt-4"
           >
-            <Button size="lg" className="rounded-full px-8 gap-2 group" onClick={() => navigate("/tournaments")}>
-              Browse Tournaments <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+            <Button
+              size="lg"
+              className="rounded-full px-8 gap-2 group"
+              onClick={() => navigate("/tournaments")}
+            >
+              Browse Tournaments{" "}
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
             </Button>
             <Button size="lg" variant="outline" className="rounded-full px-8">
               Learn More
@@ -93,8 +107,13 @@ export default function UserHome() {
       {/* Features Section */}
       <section className="space-y-8 pt-4">
         <div className="space-y-2">
-          <h2 className="text-3xl font-display font-bold">Professional Tournament Management</h2>
-          <p className="text-muted-foreground">Everything you need to organize, manage, and compete in world-class chess tournaments</p>
+          <h2 className="text-3xl font-display font-bold">
+            Professional Tournament Management
+          </h2>
+          <p className="text-muted-foreground">
+            Everything you need to organize, manage, and compete in world-class
+            chess tournaments
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -103,26 +122,26 @@ export default function UserHome() {
               title: "Swiss & Round Robin",
               desc: "Industry-standard pairing algorithms for fair matches",
               icon: Zap,
-              color: "bg-blue-500/10 text-blue-500"
+              color: "bg-blue-500/10 text-blue-500",
             },
             {
               title: "Real-time Pairings",
               desc: "Instant pairing generation and score updates",
               icon: BarChart4,
-              color: "bg-green-500/10 text-green-500"
+              color: "bg-green-500/10 text-green-500",
             },
             {
               title: "FIDE Compliance",
               desc: "Strict adherence to international chess regulations",
               icon: ShieldCheck,
-              color: "bg-purple-500/10 text-purple-500"
+              color: "bg-purple-500/10 text-purple-500",
             },
             {
               title: "Performance Analytics",
               desc: "Detailed rating changes and performance tracking",
               icon: Globe,
-              color: "bg-orange-500/10 text-orange-500"
-            }
+              color: "bg-orange-500/10 text-orange-500",
+            },
           ].map((feature, idx) => (
             <motion.div
               key={feature.title}
@@ -131,11 +150,15 @@ export default function UserHome() {
               transition={{ delay: 0.1 * idx }}
               className="group p-6 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all duration-300"
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${feature.color}`}>
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${feature.color}`}
+              >
                 <feature.icon className="h-6 w-6" />
               </div>
               <h3 className="font-bold text-lg mb-2">{feature.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {feature.desc}
+              </p>
             </motion.div>
           ))}
         </div>
@@ -144,14 +167,26 @@ export default function UserHome() {
       {/* Upcoming Highlight */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-display font-bold">Featured Tournaments</h2>
-          <Button variant="ghost" className="gap-2" onClick={() => navigate("/tournaments")}>
+          <h2 className="text-2xl font-display font-bold">
+            Featured Tournaments
+          </h2>
+          <Button
+            variant="ghost"
+            className="gap-2"
+            onClick={() => navigate("/tournaments")}
+          >
             View All <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
           {upcomingTournaments.map((t, i) => (
-            <TournamentCard key={t.id} tournament={t} index={i} showJoin onJoin={setJoinTournament} />
+            <TournamentCard
+              key={t.id}
+              tournament={t}
+              index={i}
+              showJoin
+              onJoin={setJoinTournament}
+            />
           ))}
         </div>
       </div>
@@ -161,7 +196,10 @@ export default function UserHome() {
         <div className="flex-1 space-y-4">
           <h2 className="text-2xl font-bold">Built for the Chess Community</h2>
           <p className="text-muted-foreground leading-relaxed">
-            ChessMgr is an open-source initiative dedicated to digitalizing local and international chess circuits. We focus on providing low-latency scoreboards and anti-cheat integrations for both online and hybrid events.
+            ChessMgr is an open-source initiative dedicated to digitalizing
+            local and international chess circuits. We focus on providing
+            low-latency scoreboards and anti-cheat integrations for both online
+            and hybrid events.
           </p>
           <div className="flex gap-4">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -180,7 +218,9 @@ export default function UserHome() {
           />
           <div className="relative z-10 p-6 text-center">
             <span className="text-primary font-bold">Join the Network</span>
-            <p className="text-xs text-muted-foreground mt-1">500+ Clubs trust us</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              500+ Clubs trust us
+            </p>
           </div>
         </div>
       </section>
@@ -193,4 +233,3 @@ export default function UserHome() {
     </div>
   );
 }
-

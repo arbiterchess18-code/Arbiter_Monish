@@ -16,6 +16,17 @@ class TournamentRegistrationCreate(TournamentRegistrationBase):
     player_fide_id: Optional[str] = None
 
 
+class BulkParticipantImport(BaseModel):
+    """Schema for bulk participant import from Excel"""
+    class ParticipantData(BaseModel):
+        player_name: str
+        player_email: str
+        player_rating: Optional[int] = 0
+        registered_date: Optional[str] = None
+
+    participants: List[ParticipantData]
+
+
 class TournamentRegistrationStatusUpdate(BaseModel):
     status: str
 
@@ -41,15 +52,24 @@ class TournamentRegistrationResponse(BaseModel):
     current_points: float
     seed: Optional[int] = None
     player_rating: Optional[int] = 0
+    form_data: Dict[str, Any] = {}
 
     class Config:
         from_attributes = True
 
 
+class BulkImportResponse(BaseModel):
+    """Response for bulk participant import"""
+    total_processed: int
+    successful: int
+    failed: int
+    imported: List[TournamentRegistrationResponse] = []
+    errors: List[Dict[str, Any]] = []
+
+
 class RegistrationFormFieldCreate(BaseModel):
     field_name: str
     field_type: str
-    field_image: Optional[str] = None
     is_required: bool = False
     field_order: int = 0
 
@@ -63,30 +83,44 @@ class RegistrationFormFieldCreate(BaseModel):
     @field_validator("field_type")
     @classmethod
     def validate_field_type(cls, value):
-        allowed = {
-            "Text",
-            "Email",
-            "Number",
-            "Date",
-            "Dropdown",
-            "Text Area",
-            "Display Image",
-        }
-        if value not in allowed:
-            raise ValueError("Invalid field type")
-        return value
+        normalized = (value or "").strip()
+        lowered = normalized.lower()
+        compact = "".join(ch for ch in lowered if ch.isalpha())
 
-    @field_validator("field_image")
-    @classmethod
-    def validate_field_image(cls, value):
-        if value is None:
-            return None
-        cleaned = value.strip()
-        if not cleaned:
-            return None
-        if len(cleaned) > 180000:
-            raise ValueError("Field image is too large")
-        return cleaned
+        if (
+            "screenshot" in lowered
+            or "image" in lowered
+            or "file" in lowered
+            or "file upload" in lowered
+            or "screenshot" in compact
+            or "image" in compact
+            or "file" in compact
+        ):
+            return "Image"
+
+        alias_map = {
+            "text": "Text",
+            "email": "Email",
+            "number": "Number",
+            "date": "Date",
+            "dropdown": "Dropdown",
+            "textarea": "Text Area",
+            "text area": "Text Area",
+            "image": "Image",
+            "images": "Image",
+            "file": "Image",
+            "files": "Image",
+            "file upload": "Image",
+            "screenshot": "Image",
+            "screenshots": "Image",
+        }
+        canonical = alias_map.get(lowered, alias_map.get(compact, normalized))
+        allowed = {"Text", "Email", "Number",
+                   "Date", "Dropdown", "Text Area", "Image"}
+        if canonical not in allowed:
+            raise ValueError(
+                "Invalid field type. Use one of: text, email, number, date, dropdown, text area, image/file")
+        return canonical
 
 
 class RegistrationFormFieldResponse(RegistrationFormFieldCreate):

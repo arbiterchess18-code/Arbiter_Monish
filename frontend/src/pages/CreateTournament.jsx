@@ -33,6 +33,7 @@ import {
   Trophy,
   Gamepad2,
   Settings,
+  FileText,
   Upload,
   ChevronRight,
   ChevronLeft,
@@ -44,6 +45,7 @@ import {
   getTournamentById,
   updateTournament,
   getArbiters,
+  getRegistrationFormFields,
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 
@@ -60,6 +62,7 @@ export default function CreateTournament() {
   const [errors, setErrors] = useState({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [availableArbiters, setAvailableArbiters] = useState([]);
+  const [registrationFormMode, setRegistrationFormMode] = useState("built_in");
 
   const [tournamentData, setTournamentData] = useState({
     name: "",
@@ -208,6 +211,11 @@ export default function CreateTournament() {
           (existingTournament.type === "Swiss System" ? "Swiss" : "Swiss"),
         eventType: existingTournament.eventType || prev.eventType,
       }));
+
+      const existingFields = await getRegistrationFormFields(editTournamentId);
+      if ((existingFields || []).length > 0) {
+        setRegistrationFormMode("custom");
+      }
     };
     fetchTournament();
   }, [editTournamentId]);
@@ -624,17 +632,9 @@ export default function CreateTournament() {
         });
       }
 
-      // Validate custom fields if private
-      if (tournamentData.isPrivate) {
-        tournamentData.customFields.forEach((field, index) => {
-          if (
-            !field.label ||
-            (typeof field.label === "string" && field.label.trim().length < 2)
-          ) {
-            newErrors[`customField_${index}`] = "Field label required";
-            isValid = false;
-          }
-        });
+      // Custom registration flow is created via Registration Form Builder after save.
+      if (registrationFormMode === "custom" && editTournamentId) {
+        // No blocking validation here; builder handles field-level validation.
       }
     }
 
@@ -674,9 +674,8 @@ export default function CreateTournament() {
     try {
       const payload = {
         ...tournamentData,
-        customFields: tournamentData.isPrivate
-          ? tournamentData.customFields
-          : [],
+        isPrivate: false,
+        customFields: [],
         fideId: tournamentData.isRated ? tournamentData.fideId : "",
         aicfId: tournamentData.isRated ? tournamentData.aicfId : "",
         kscaId: tournamentData.isRated ? tournamentData.kscaId : "",
@@ -695,6 +694,10 @@ export default function CreateTournament() {
 
       const savedId = savedTournament.tournament_id || savedTournament.id;
       setTimeout(() => {
+        if (registrationFormMode === "custom" && savedId) {
+          navigate(`/arbiter/tournament/${savedId}/registration-form`);
+          return;
+        }
         navigate("/orbiter/manage");
       }, 500);
     } catch (error) {
@@ -711,18 +714,20 @@ export default function CreateTournament() {
         {[1, 2, 3].map((step) => (
           <div key={step} className="flex items-center flex-1">
             <div
-              className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm transition-colors ${currentStep >= step
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-                }`}
+              className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm transition-colors ${
+                currentStep >= step
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               {step < currentStep && <CheckCircle2 className="w-5 h-5" />}
               {step >= currentStep && step}
             </div>
             {step < 3 && (
               <div
-                className={`flex-1 h-1 mx-2 rounded ${currentStep > step ? "bg-primary" : "bg-muted"
-                  }`}
+                className={`flex-1 h-1 mx-2 rounded ${
+                  currentStep > step ? "bg-primary" : "bg-muted"
+                }`}
               />
             )}
           </div>
@@ -813,8 +818,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("startDate", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.startDate ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.startDate ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.startDate && (
                     <p className="text-sm text-destructive mt-1">
@@ -833,8 +839,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("startTime", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.startTime ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.startTime ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.startTime && (
                     <p className="text-sm text-destructive mt-1">
@@ -887,8 +894,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("contactPerson", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.contactPerson ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.contactPerson ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.contactPerson && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -911,8 +919,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("contactEmail", e.target.value)
                       }
-                      className={`mt-1.5 pl-10 ${errors.contactEmail ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 pl-10 ${
+                        errors.contactEmail ? "border-destructive" : ""
+                      }`}
                     />
                   </div>
                   {errors.contactEmail && (
@@ -935,8 +944,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("contactPhone", e.target.value)
                       }
-                      className={`mt-1.5 pl-10 ${errors.contactPhone ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 pl-10 ${
+                        errors.contactPhone ? "border-destructive" : ""
+                      }`}
                     />
                   </div>
                   {errors.contactPhone && (
@@ -960,20 +970,31 @@ export default function CreateTournament() {
 
               <div className="space-y-4">
                 {tournamentData.sub_arbiters?.map((staff, idx) => (
-                  <div key={idx} className="flex flex-col md:flex-row gap-4 items-end p-4 border rounded-lg bg-muted/20 relative">
+                  <div
+                    key={idx}
+                    className="flex flex-col md:flex-row gap-4 items-end p-4 border rounded-lg bg-muted/20 relative"
+                  >
                     <div className="flex-1 w-full">
                       <Label>Select Sub-Arbiter</Label>
                       <Select
                         value={staff.user_id?.toString() || ""}
-                        onValueChange={(val) => updateStaff(idx, "user_id", val)}
+                        onValueChange={(val) =>
+                          updateStaff(idx, "user_id", val)
+                        }
                       >
                         <SelectTrigger className="mt-1.5">
                           <SelectValue placeholder="Choose an Arbiter" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[200px]">
                           {availableArbiters.map((arb) => (
-                            <SelectItem key={arb.user_id} value={arb.user_id.toString()}>
-                              {arb.first_name || arb.last_name ? `${arb.first_name} ${arb.last_name}` : arb.username} ({arb.email})
+                            <SelectItem
+                              key={arb.user_id}
+                              value={arb.user_id.toString()}
+                            >
+                              {arb.first_name || arb.last_name
+                                ? `${arb.first_name} ${arb.last_name}`
+                                : arb.username}{" "}
+                              ({arb.email})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -986,7 +1007,9 @@ export default function CreateTournament() {
                         placeholder="e.g. Deputy Chief Arbiter"
                         className="mt-1.5"
                         value={staff.position}
-                        onChange={(e) => updateStaff(idx, "position", e.target.value)}
+                        onChange={(e) =>
+                          updateStaff(idx, "position", e.target.value)
+                        }
                       />
                     </div>
 
@@ -997,7 +1020,9 @@ export default function CreateTournament() {
                         placeholder="e.g. 1234567"
                         className="mt-1.5"
                         value={staff.fide_id}
-                        onChange={(e) => updateStaff(idx, "fide_id", e.target.value)}
+                        onChange={(e) =>
+                          updateStaff(idx, "fide_id", e.target.value)
+                        }
                       />
                     </div>
 
@@ -1041,8 +1066,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("venueName", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.venueName ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.venueName ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.venueName && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -1089,8 +1115,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("country", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.country ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.country ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.country && (
                     <p className="text-sm text-destructive mt-1">
@@ -1114,8 +1141,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("googleMapsLink", e.target.value)
                     }
-                    className={`mt-1.5 pl-10 ${errors.googleMapsLink ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 pl-10 ${
+                      errors.googleMapsLink ? "border-destructive" : ""
+                    }`}
                   />
                 </div>
               </div>
@@ -1139,8 +1167,9 @@ export default function CreateTournament() {
                   onChange={(e) =>
                     handleInputChange("organizerName", e.target.value)
                   }
-                  className={`mt-1.5 ${errors.organizerName ? "border-destructive" : ""
-                    }`}
+                  className={`mt-1.5 ${
+                    errors.organizerName ? "border-destructive" : ""
+                  }`}
                 />
                 {errors.organizerName && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -1213,8 +1242,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("entryFee", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.entryFee ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.entryFee ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.entryFee && (
                     <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -1250,8 +1280,9 @@ export default function CreateTournament() {
                     }
                   >
                     <SelectTrigger
-                      className={`mt-1.5 ${errors.eventType ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.eventType ? "border-destructive" : ""
+                      }`}
                     >
                       <SelectValue placeholder="Select event type" />
                     </SelectTrigger>
@@ -1306,8 +1337,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("timeControl", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.timeControl ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.timeControl ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.timeControl && (
                     <p className="text-sm text-destructive mt-1">
@@ -1328,8 +1360,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("increment", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.increment ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.increment ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.increment && (
                     <p className="text-sm text-destructive mt-1">
@@ -1349,8 +1382,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("rounds", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.rounds ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.rounds ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.rounds && (
                     <p className="text-sm text-destructive mt-1">
@@ -1491,10 +1525,11 @@ export default function CreateTournament() {
                           <div
                             key={method}
                             onClick={() => toggleTieBreaker(method)}
-                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${isSelected
-                              ? "bg-primary/5 border-primary/40 opacity-50"
-                              : "hover:bg-muted/80 border-border"
-                              }`}
+                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${
+                              isSelected
+                                ? "bg-primary/5 border-primary/40 opacity-50"
+                                : "hover:bg-muted/80 border-border"
+                            }`}
                           >
                             <div className="flex flex-col">
                               <span className="text-sm font-medium">
@@ -1605,10 +1640,11 @@ export default function CreateTournament() {
                 }}
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handlePdfDrop}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/30"
-                  }`}
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  isDragOver
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/30"
+                }`}
               >
                 <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mb-3">
@@ -1645,19 +1681,85 @@ export default function CreateTournament() {
                 <Settings className="w-5 h-5" /> Tournament Controls
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+              <div className="p-4 bg-muted/50 rounded-lg border space-y-4">
                 <div>
-                  <Label>Private Tournament</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Enable custom registration fields
+                  <Label className="text-sm font-semibold">
+                    Registration Form Mode
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Choose one: use the built-in registration form or create
+                    your own custom form.
                   </p>
                 </div>
-                <Switch
-                  checked={tournamentData.isPrivate}
-                  onCheckedChange={(checked) =>
-                    handleInputChange("isPrivate", checked)
-                  }
-                />
+
+                <RadioGroup
+                  value={registrationFormMode}
+                  onValueChange={setRegistrationFormMode}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                >
+                  <div className="rounded-lg border p-3 bg-background/70">
+                    <div className="flex items-start gap-3">
+                      <RadioGroupItem value="built_in" id="reg-mode-built-in" />
+                      <Label
+                        htmlFor="reg-mode-built-in"
+                        className="cursor-pointer space-y-1"
+                      >
+                        <div className="font-medium">
+                          Built-in Registration Form
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Uses default fields like name, email, phone, rating.
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-3 bg-background/70">
+                    <div className="flex items-start gap-3">
+                      <RadioGroupItem value="custom" id="reg-mode-custom" />
+                      <Label
+                        htmlFor="reg-mode-custom"
+                        className="cursor-pointer space-y-1"
+                      >
+                        <div className="font-medium">
+                          Custom Registration Form
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Arbiter can design custom fields for this tournament.
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+                </RadioGroup>
+
+                {registrationFormMode === "custom" && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+                    <p className="text-sm text-foreground">
+                      Players will see only this custom form while registering.
+                    </p>
+                    {editTournamentId ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() =>
+                          navigate(
+                            `/arbiter/tournament/${editTournamentId}/registration-form`,
+                          )
+                        }
+                      >
+                        <FileText className="w-4 h-4" /> Create / Edit
+                        Registration Form
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Save tournament first, then you will be redirected to
+                        create the custom registration form.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
@@ -1699,8 +1801,9 @@ export default function CreateTournament() {
                         onChange={(e) =>
                           handleInputChange(item.field, e.target.value)
                         }
-                        className={`mt-1.5 ${errors[item.field] ? "border-destructive" : ""
-                          }`}
+                        className={`mt-1.5 ${
+                          errors[item.field] ? "border-destructive" : ""
+                        }`}
                       />
                       {errors[item.field] && (
                         <p className="text-sm text-destructive mt-1">
@@ -1714,78 +1817,13 @@ export default function CreateTournament() {
             </Card>
           )}
 
-          {/* Custom Fields */}
-          {tournamentData.isPrivate && (
+          {registrationFormMode === "custom" && !editTournamentId && (
             <Card className="stat-card border-primary/20">
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-primary font-semibold">
-                    <Settings className="w-5 h-5" /> Custom Fields
-                  </div>
-                  <Button variant="outline" size="sm" onClick={addCustomField}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Field
-                  </Button>
-                </div>
-
-                {tournamentData.customFields.map((field, idx) => (
-                  <div
-                    key={idx}
-                    className="flex gap-4 items-end p-4 border rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <Label>Label</Label>
-                      <Input
-                        placeholder="e.g., T-Shirt Size"
-                        className="mt-1"
-                        value={field.label}
-                        onChange={(e) =>
-                          updateCustomField(idx, "label", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <Label>Type</Label>
-                      <Select
-                        value={field.type}
-                        onValueChange={(value) =>
-                          updateCustomField(idx, "type", value)
-                        }
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Text">Text</SelectItem>
-                          <SelectItem value="Number">Number</SelectItem>
-                          <SelectItem value="Dropdown">Dropdown</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2 pb-2">
-                      <Checkbox
-                        id={`required-${idx}`}
-                        checked={field.required}
-                        onCheckedChange={(checked) =>
-                          updateCustomField(idx, "required", checked)
-                        }
-                      />
-                      <Label
-                        htmlFor={`required-${idx}`}
-                        className="text-sm cursor-pointer"
-                      >
-                        Required
-                      </Label>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeCustomField(idx)}
-                      className="text-destructive hover:bg-destructive/10"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Custom form fields are managed in the dedicated Registration
+                  Form Builder after tournament creation.
+                </p>
               </CardContent>
             </Card>
           )}
@@ -1809,8 +1847,9 @@ export default function CreateTournament() {
                     onChange={(e) =>
                       handleInputChange("accountHolderName", e.target.value)
                     }
-                    className={`mt-1.5 ${errors.accountHolderName ? "border-destructive" : ""
-                      }`}
+                    className={`mt-1.5 ${
+                      errors.accountHolderName ? "border-destructive" : ""
+                    }`}
                   />
                   {errors.accountHolderName && (
                     <p className="text-sm text-destructive mt-1">
@@ -1830,8 +1869,9 @@ export default function CreateTournament() {
                       onChange={(e) =>
                         handleInputChange("accountNumber", e.target.value)
                       }
-                      className={`mt-1.5 ${errors.accountNumber ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.accountNumber ? "border-destructive" : ""
+                      }`}
                     />
                     {errors.accountNumber && (
                       <p className="text-sm text-destructive mt-1">
@@ -1853,8 +1893,9 @@ export default function CreateTournament() {
                           e.target.value.toUpperCase(),
                         )
                       }
-                      className={`mt-1.5 ${errors.ifscCode ? "border-destructive" : ""
-                        }`}
+                      className={`mt-1.5 ${
+                        errors.ifscCode ? "border-destructive" : ""
+                      }`}
                     />
                     {errors.ifscCode && (
                       <p className="text-sm text-destructive mt-1">

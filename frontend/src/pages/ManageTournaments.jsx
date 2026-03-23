@@ -22,7 +22,13 @@ import {
 } from "@/lib/tournament-service";
 import { useRole } from "@/lib/role-context";
 import { Card, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function ManageTournaments() {
   const navigate = useNavigate();
@@ -88,7 +94,7 @@ export default function ManageTournaments() {
   // Compute whether the current user is a sub-arbiter on each tournament
   const isSubArbiterOnTournament = (t) =>
     !(t.createdBy?.toString() === userId?.toString()) &&
-    t.subArbiters.some(sa => sa?.user_id?.toString() === userId?.toString());
+    t.subArbiters.some((sa) => sa?.user_id?.toString() === userId?.toString());
 
   if (role !== "arbiter" && role !== "admin" && role !== "organization") {
     return (
@@ -168,7 +174,9 @@ export default function ManageTournaments() {
                 <SelectItem value="ongoing">Ongoing</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
                 <SelectItem value="finished">Finished</SelectItem>
-                <SelectItem value="sub_arbiter">Appointed as Sub-Arbiter</SelectItem>
+                <SelectItem value="sub_arbiter">
+                  Appointed as Sub-Arbiter
+                </SelectItem>
               </SelectContent>
             </Select>
             <Button onClick={() => navigate("/orbiter/create")}>
@@ -192,106 +200,117 @@ export default function ManageTournaments() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {tournaments.filter(t => {
-            if (filterMode === "all") return true;
-            if (filterMode === "ongoing") return t.status === "active";
-            if (filterMode === "upcoming") return t.status === "upcoming" || t.status === "published";
-            if (filterMode === "finished") return t.status === "completed";
-            if (filterMode === "sub_arbiter") return t.subArbiters.some(sa => sa?.user_id?.toString() === userId?.toString());
-            return true;
-          }).map((t, i) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const startDate = new Date(t.date);
-            startDate.setHours(0, 0, 0, 0);
-            const cannotUnpublish =
-              t.status === "published" && today >= startDate;
-            const cannotDelete = t.status === "active";
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+          {tournaments
+            .filter((t) => {
+              if (filterMode === "all") return true;
+              if (filterMode === "ongoing") return t.status === "active";
+              if (filterMode === "upcoming")
+                return t.status === "upcoming" || t.status === "published";
+              if (filterMode === "finished") return t.status === "completed";
+              if (filterMode === "sub_arbiter")
+                return t.subArbiters.some(
+                  (sa) => sa?.user_id?.toString() === userId?.toString(),
+                );
+              return true;
+            })
+            .map((t, i) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const startDate = new Date(t.date);
+              startDate.setHours(0, 0, 0, 0);
+              const cannotUnpublish =
+                t.status === "published" && today >= startDate;
+              const cannotDelete = t.status === "active";
 
-            const isCreator = t.createdBy?.toString() === userId?.toString();
-            const isSubArbiterCard = isSubArbiterOnTournament(t);
+              const isCreator = t.createdBy?.toString() === userId?.toString();
+              const isSubArbiterCard = isSubArbiterOnTournament(t);
 
-            return (
-              <TournamentCard
-                key={t.id}
-                tournament={t}
-                isSubArbiter={isSubArbiterCard}
-                index={i}
-                hideActions={true}
-                customActions={
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs font-medium px-0"
-                      onClick={() => navigate(`/tournament/${t.id}`)}
-                      title="View tournament details"
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-1" /> View Details
-                    </Button>
+              return (
+                <TournamentCard
+                  key={t.id}
+                  tournament={t}
+                  isSubArbiter={isSubArbiterCard}
+                  index={i}
+                  hideActions={true}
+                  customActions={
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs font-medium px-0"
+                        onClick={() => navigate(`/tournament/${t.id}`)}
+                        title="View tournament details"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1" /> View Details
+                      </Button>
 
-                    {!isSubArbiterCard && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs font-medium px-0"
-                          onClick={() => navigate(`/orbiter/create?edit=${t.id}`)}
-                          title="Edit tournament"
-                        >
-                          <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
-                        </Button>
+                      {!isSubArbiterCard && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs font-medium px-0"
+                            onClick={() =>
+                              navigate(`/orbiter/create?edit=${t.id}`)
+                            }
+                            title="Edit tournament"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                          </Button>
 
-                        <Button
-                          variant={t.status === "published" ? "default" : "outline"}
-                          size="sm"
-                          className={`w-full text-xs font-medium px-0 ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
-                          onClick={() => togglePublish(t)}
-                          disabled={cannotUnpublish}
-                          title={
-                            cannotUnpublish
-                              ? "Cannot unpublish once the start date has arrived"
-                              : t.status === "published"
-                                ? "Unpublish tournament"
-                                : "Publish tournament"
-                          }
-                        >
-                          {t.status === "published" ? (
-                            <>
-                              <StopCircle className="h-3.5 w-3.5 mr-1" /> Unpublish
-                            </>
-                          ) : (
-                            <>
-                              <Globe className="h-3.5 w-3.5 mr-1" /> Publish
-                            </>
-                          )}
-                        </Button>
+                          <Button
+                            variant={
+                              t.status === "published" ? "default" : "outline"
+                            }
+                            size="sm"
+                            className={`w-full text-xs font-medium px-0 ${t.status === "published" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                            onClick={() => togglePublish(t)}
+                            disabled={cannotUnpublish}
+                            title={
+                              cannotUnpublish
+                                ? "Cannot unpublish once the start date has arrived"
+                                : t.status === "published"
+                                  ? "Unpublish tournament"
+                                  : "Publish tournament"
+                            }
+                          >
+                            {t.status === "published" ? (
+                              <>
+                                <StopCircle className="h-3.5 w-3.5 mr-1" />{" "}
+                                Unpublish
+                              </>
+                            ) : (
+                              <>
+                                <Globe className="h-3.5 w-3.5 mr-1" /> Publish
+                              </>
+                            )}
+                          </Button>
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs font-medium px-0 text-destructive border-destructive/30 hover:bg-destructive/10"
-                          onClick={() => {
-                            setActionTournament(t.id);
-                            setActionType("delete");
-                          }}
-                          disabled={cannotDelete}
-                          title={
-                            cannotDelete
-                              ? "Cannot delete an ongoing tournament"
-                              : "Delete tournament"
-                          }
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                        </Button>
-                      </>
-                    )}
-                  </>
-                }
-              />
-            );
-          })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs font-medium px-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+                            onClick={() => {
+                              setActionTournament(t.id);
+                              setActionType("delete");
+                            }}
+                            disabled={cannotDelete}
+                            title={
+                              cannotDelete
+                                ? "Cannot delete an ongoing tournament"
+                                : "Delete tournament"
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  }
+                />
+              );
+            })}
         </div>
       )}
 
