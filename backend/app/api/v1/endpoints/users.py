@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from .... import models
 from ....database import get_db
 from ....core.security import get_current_user
+from ....services.fide import get_fide_history_cached, fetch_fide_player_info
 
 router = APIRouter()
 
@@ -15,6 +16,8 @@ class UserProfileUpdate(BaseModel):
     last_name: Optional[str] = None
     fide_id: Optional[str] = None
     fide_rating: Optional[int] = None
+    rapid_rating: Optional[int] = None
+    blitz_rating: Optional[int] = None
     national_rating: Optional[int] = None
     country: Optional[str] = None
     bio: Optional[str] = None
@@ -33,6 +36,45 @@ async def get_my_profile(
     primary_role = "arbiter" if any(
         r in roles for r in ["SUPER_ADMIN", "ADMIN", "ARBITER"]) else "player"
 
+    history = []
+    if current_user.fide_id:
+        # Auto-refresh ratings from FIDE API if any are still 0 or missing (legacy/pre-migration accounts)
+        needs_refresh = (
+            not current_user.fide_rating or current_user.fide_rating == 0 or
+            not current_user.rapid_rating or current_user.rapid_rating == 0 or
+            not current_user.blitz_rating or current_user.blitz_rating == 0 or
+            current_user.national_rank is None
+        )
+        if needs_refresh:
+            try:
+                fide_data = await fetch_fide_player_info(current_user.fide_id)
+                if fide_data:
+                    if not current_user.fide_rating or current_user.fide_rating == 0:
+                        current_user.fide_rating = fide_data.get("classical_rating", 0)
+                    if not current_user.rapid_rating or current_user.rapid_rating == 0:
+                        current_user.rapid_rating = fide_data.get("rapid_rating", 0)
+                    if not current_user.blitz_rating or current_user.blitz_rating == 0:
+                        current_user.blitz_rating = fide_data.get("blitz_rating", 0)
+                    if not current_user.title:
+                        current_user.title = fide_data.get("fide_title")
+                    if not current_user.country or current_user.country == "India":
+                        current_user.country = fide_data.get("federation") or current_user.country
+                    if fide_data.get("national_rank_all"):
+                        current_user.national_rank = fide_data.get("national_rank_all")
+                    # Also try to populate name if missing
+                    if not current_user.first_name and fide_data.get("name"):
+                        name_parts = fide_data.get("name").strip().split(" ", 1)
+                        current_user.first_name = name_parts[0]
+                        current_user.last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+                    db.commit()
+                    db.refresh(current_user)
+            except Exception:
+                pass  # Don't fail the request if FIDE API is down
+
+        # Use the cached history — only calls FIDE API if cache is missing or >30 days old
+        history = await get_fide_history_cached(current_user, db)
+
     return {
         "user_id": current_user.user_id,
         "username": current_user.username,
@@ -42,8 +84,13 @@ async def get_my_profile(
         "name": full_name,
         "fide_id": current_user.fide_id or "",
         "fide_rating": current_user.fide_rating or 0,
+        "rapid_rating": current_user.rapid_rating or 0,
+        "blitz_rating": current_user.blitz_rating or 0,
         "national_rating": current_user.national_rating or 0,
+        "national_rank": current_user.national_rank or None,
         "country": current_user.country or "India",
+        "title": current_user.title or "",
+        "rating_history": history,
         "role": primary_role,
         "is_active": current_user.is_active,
         "profile_picture_url": current_user.profile_picture_url,
@@ -64,17 +111,49 @@ async def update_my_profile(
         current_user.last_name = profile_update.last_name
     if profile_update.fide_id is not None:
         # Check fide_id uniqueness if it changed
-        if profile_update.fide_id and profile_update.fide_id != current_user.fide_id:
+        new_fide_id = profile_update.fide_id.strip() if profile_update.fide_id else None
+        if new_fide_id and new_fide_id != current_user.fide_id:
             existing = db.query(models.User).filter(
-                models.User.fide_id == profile_update.fide_id,
+                models.User.fide_id == new_fide_id,
                 models.User.user_id != current_user.user_id
             ).first()
             if existing:
                 raise HTTPException(
                     status_code=400, detail="FIDE ID already registered to another user")
-        current_user.fide_id = profile_update.fide_id or None
+
+            # Auto-sync ratings and name from FIDE API — same as signup
+            try:
+                fide_data = await fetch_fide_player_info(new_fide_id)
+                if fide_data:
+                    current_user.fide_rating = fide_data.get("classical_rating") or current_user.fide_rating
+                    current_user.rapid_rating = fide_data.get("rapid_rating") or current_user.rapid_rating
+                    current_user.blitz_rating = fide_data.get("blitz_rating") or current_user.blitz_rating
+                    if fide_data.get("fide_title"):
+                        current_user.title = fide_data.get("fide_title")
+                    if fide_data.get("federation"):
+                        current_user.country = fide_data.get("federation")
+                    if fide_data.get("national_rank_all"):
+                        current_user.national_rank = fide_data.get("national_rank_all")
+                    # Parse full name into first/last name
+                    fide_name = fide_data.get("name", "").strip()
+                    if fide_name:
+                        name_parts = fide_name.split(" ", 1)
+                        current_user.first_name = name_parts[0]
+                        current_user.last_name = name_parts[1] if len(name_parts) > 1 else ""
+            except Exception:
+                pass  # Don't fail the save if FIDE API is down
+
+        current_user.fide_id = new_fide_id
+        # Invalidate history cache when FIDE ID changes
+        current_user.fide_history_cache = None
+        current_user.fide_history_synced_at = None
+
     if profile_update.fide_rating is not None:
         current_user.fide_rating = profile_update.fide_rating
+    if profile_update.rapid_rating is not None:
+        current_user.rapid_rating = profile_update.rapid_rating
+    if profile_update.blitz_rating is not None:
+        current_user.blitz_rating = profile_update.blitz_rating
     if profile_update.national_rating is not None:
         current_user.national_rating = profile_update.national_rating
     if profile_update.country is not None:
@@ -95,11 +174,15 @@ async def update_my_profile(
         "last_name": current_user.last_name or "",
         "fide_id": current_user.fide_id or "",
         "fide_rating": current_user.fide_rating or 0,
+        "rapid_rating": current_user.rapid_rating or 0,
+        "blitz_rating": current_user.blitz_rating or 0,
         "national_rating": current_user.national_rating or 0,
+        "title": current_user.title or "",
         "country": current_user.country or "India",
         "profile_picture_url": current_user.profile_picture_url,
         "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
     }
+
 
 
 @router.get("/me/achievements")

@@ -38,7 +38,10 @@ class User(Base):
     gender = Column(String(20))
     fide_id = Column(String(20), unique=True)
     fide_rating = Column(Integer, default=0)
+    rapid_rating = Column(Integer, default=0)
+    blitz_rating = Column(Integer, default=0)
     national_rating = Column(Integer, default=0)
+    national_rank = Column(Integer, nullable=True)
     country = Column(String(100), default="India")
     is_active = Column(Boolean, default=True)
 
@@ -47,6 +50,10 @@ class User(Base):
     lichess_rating = Column(Integer, nullable=True)
     chesstools_rating = Column(Integer, nullable=True)
     last_rating_sync = Column(TIMESTAMP, nullable=True)
+
+    # FIDE History Cache — refreshed at most once every 30 days
+    fide_history_cache = Column(JSON, nullable=True, default=None)
+    fide_history_synced_at = Column(TIMESTAMP, nullable=True, default=None)
 
     # Arbiter-specific fields
     title = Column(String(100), nullable=True)  # e.g., "International Arbiter"

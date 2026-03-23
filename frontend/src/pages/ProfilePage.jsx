@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Edit2, Save, X, User, Bell, Camera, TrendingUp,
+  Edit2, Save, X, User, Bell, Camera, TrendingUp, Trophy,
   Shield, Briefcase, MapPin, Star, Calendar, DollarSign, Clock
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -25,6 +25,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  Legend,
 } from "recharts";
 import { mockRatingHistory, mockArbiterVacancies } from "@/lib/mock-data";
 import { getUserProfile, updateUserProfile } from "@/lib/tournament-service";
@@ -96,6 +97,7 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState(mockProfile);
   const [draftProfile, setDraftProfile] = useState(mockProfile);
+  const [historyData, setHistoryData] = useState([]);
   const [notifPrefs, setNotifPrefs] = useState(() => {
     try {
       const saved = localStorage.getItem("notifPrefs");
@@ -121,13 +123,27 @@ export default function ProfilePage() {
             last_name: data.last_name || "",
             fide_id: data.fide_id || "",
             rating: data.fide_rating || "—",
+            rapid_rating: data.rapid_rating || "—",
+            blitz_rating: data.blitz_rating || "—",
             national_rating: data.national_rating || "—",
+            national_rank: data.national_rank || null,
+            chess_title: data.title || "",
             country: data.country || "India",
             profile_picture_url: data.profile_picture_url || null,
             updated_at: data.updated_at,
           };
           setProfile(mapped);
           setDraftProfile(mapped);
+
+          if (data.rating_history) {
+             const cleanedHistory = data.rating_history.map(item => ({
+                period: item.period.split('-')[1] || item.period,
+                classical: item.classical_rating > 0 ? item.classical_rating : null,
+                rapid: item.rapid_rating > 0 ? item.rapid_rating : null,
+                blitz: item.blitz_rating > 0 ? item.blitz_rating : null,
+             }));
+             setHistoryData(cleanedHistory);
+          }
         }
       } catch (err) {
         console.error("Failed to load user profile:", err);
@@ -150,20 +166,58 @@ export default function ProfilePage() {
         country: draftProfile.country,
         profile_picture_url: draftProfile.profile_picture_url
       });
-      // Merge the API response back into profile
+
+      // Merge the API response back — including FIDE-synced ratings and title
       const updated = {
         ...draftProfile,
         name: result.name,
         first_name: result.first_name,
         last_name: result.last_name,
         fide_id: result.fide_id,
-        rating: result.fide_rating,
+        rating: result.fide_rating || draftProfile.rating,
+        rapid_rating: result.rapid_rating || draftProfile.rapid_rating,
+        blitz_rating: result.blitz_rating || draftProfile.blitz_rating,
         national_rating: result.national_rating,
+        national_rank: result.national_rank ?? draftProfile.national_rank,
+        chess_title: result.title || draftProfile.chess_title,
+        country: result.country || draftProfile.country,
         profile_picture_url: result.profile_picture_url,
         updated_at: result.updated_at,
       };
       setProfile(updated);
       setDraftProfile(updated);
+
+      // Re-fetch the full profile to get the fresh rating history chart
+      try {
+        const fresh = await getUserProfile();
+        if (fresh) {
+          const refreshed = {
+            ...updated,
+            name: fresh.name || updated.name,
+            first_name: fresh.first_name || updated.first_name,
+            last_name: fresh.last_name || updated.last_name,
+            rating: fresh.fide_rating || updated.rating,
+            rapid_rating: fresh.rapid_rating || updated.rapid_rating,
+            blitz_rating: fresh.blitz_rating || updated.blitz_rating,
+            national_rank: fresh.national_rank ?? updated.national_rank,
+            chess_title: fresh.title || updated.chess_title,
+            country: fresh.country || updated.country,
+          };
+          setProfile(refreshed);
+          setDraftProfile(refreshed);
+          if (fresh.rating_history) {
+            const cleanedHistory = fresh.rating_history.map(item => ({
+              period: item.period.split('-')[1] || item.period,
+              classical: item.classical_rating > 0 ? item.classical_rating : null,
+              rapid: item.rapid_rating > 0 ? item.rapid_rating : null,
+              blitz: item.blitz_rating > 0 ? item.blitz_rating : null,
+            }));
+            setHistoryData(cleanedHistory);
+          }
+        }
+      } catch (_) {
+        // Non-critical: ratings already shown from PATCH response
+      }
 
       // Sync specific fields to session storage so navbar updates immediately
       const savedUserData = sessionStorage.getItem("userData");
@@ -182,6 +236,7 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
+
 
   const handleCancel = () => {
     setDraftProfile(profile);
@@ -449,30 +504,37 @@ export default function ProfilePage() {
               <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="stat-card">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary" /> Rating History
+                    <TrendingUp className="h-4 w-4 text-primary" /> Multi-Rating History
                   </h3>
-                  <span className="text-2xl font-bold text-primary">{profile.rating}</span>
                 </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <LineChart data={mockRatingHistory} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} domain={["auto", "auto"]} />
-                    <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Line type="monotone" dataKey="rating" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--primary))" }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {historyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={historyData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                      <YAxis domain={['dataMin - 20', 'dataMax + 20']} axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dx={-10} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                      <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                      <Line type="monotone" dataKey="classical" name="Classical" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+                      <Line type="monotone" dataKey="rapid" name="Rapid" stroke="#1e3a8a" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+                      <Line type="monotone" dataKey="blitz" name="Blitz" stroke="#d97706" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[260px] flex items-center justify-center text-muted-foreground text-sm">
+                    No rating history available
+                  </div>
+                )}
               </motion.div>
             </div>
 
             {/* Right column – quick stats */}
             <div className="space-y-4">
               {[
-                { label: "FIDE Rating", value: profile.rating, icon: <Star className="h-4 w-4 text-chess-gold" /> },
-                { label: "National Rating", value: profile.national_rating, icon: <TrendingUp className="h-4 w-4 text-primary" /> },
+                { label: "Classical", value: profile.rating, icon: <Star className="h-4 w-4 text-slate-900" /> },
+                { label: "Rapid", value: profile.rapid_rating, icon: <TrendingUp className="h-4 w-4 text-blue-900" /> },
+                { label: "Blitz", value: profile.blitz_rating, icon: <TrendingUp className="h-4 w-4 text-amber-600" /> },
+                { label: "National Rank", value: profile.national_rank ? `#${profile.national_rank}` : "—", icon: <Trophy className="h-4 w-4 text-amber-600" /> },
                 { label: "Title", value: profile.chess_title || "—", icon: <Shield className="h-4 w-4 text-purple-400" /> },
                 { label: "Country", value: profile.country || "—", icon: <MapPin className="h-4 w-4 text-info" /> },
               ].map(({ label, value, icon }) => (
