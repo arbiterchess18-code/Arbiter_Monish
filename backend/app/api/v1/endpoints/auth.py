@@ -492,6 +492,8 @@ async def signup(
             fide_data = await fetch_fide_player_info(user_in.fide_id)
             new_user.fide_id = str(fide_data.get("fide_id"))
             new_user.fide_rating = fide_data.get("classical_rating")
+            new_user.rapid_rating = fide_data.get("rapid_rating")
+            new_user.blitz_rating = fide_data.get("blitz_rating")
             new_user.title = fide_data.get("fide_title")
             new_user.country = fide_data.get("federation")
         except HTTPException as e:

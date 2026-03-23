@@ -38,6 +38,7 @@ const orbiterConductingLinks = [
   { title: "Leaderboards", url: "/orbiter/leaderboards", icon: Trophy },
   { title: "Statistics", url: "/orbiter/stats", icon: BarChart3 },
   { title: "Organizer Requests", url: "/orbiter/requests", icon: Users },
+  { title: "Profile", url: "/profile", icon: User },
 ];
 
 const organizationConductingLinks = [
