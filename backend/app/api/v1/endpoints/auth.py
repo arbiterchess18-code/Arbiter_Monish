@@ -237,7 +237,7 @@ def _build_unique_username(db: Session, email: str) -> str:
 
 @router.post("/token")
 @limiter.limit("5/minute")
-async def login(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(
         models.User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -265,7 +265,7 @@ async def login(request: Request, response: Response, form_data: OAuth2PasswordR
 
 
 @router.get("/auth/google/login")
-async def google_login(request: Request, mode: str = Query(default="login"), role: str = Query(default="player")):
+def google_login(request: Request, mode: str = Query(default="login"), role: str = Query(default="player")):
     google_client_id = os.getenv("GOOGLE_CLIENT_ID")
     backend_public_url = os.getenv(
         "BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
@@ -423,7 +423,7 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
     secure, samesite = _get_cookie_security()
 
     refresh_token = request.cookies.get("refresh_token")
@@ -468,7 +468,7 @@ async def refresh_token(request: Request, response: Response, db: Session = Depe
 
 
 @router.post("/logout")
-async def logout(response: Response):
+def logout(response: Response):
     secure, samesite = _get_cookie_security()
     response.delete_cookie(
         key="access_token", samesite=samesite, secure=secure)

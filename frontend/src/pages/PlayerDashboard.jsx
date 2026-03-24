@@ -310,44 +310,7 @@ const PlayerDashboard = () => {
         )}
       </div>
 
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-display font-bold">Suggested for You</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {upcomingTournaments.map((t, i) => (
-            <motion.div
-              key={t.tournament_id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 * i }}
-              className="bg-card border border-border rounded-2xl p-5 hover:border-primary/50 transition-colors group cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">
-                  {t.pairing_system || t.event_type || "Open"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t.start_date || "TBA"}
-                </div>
-              </div>
-              <h4 className="font-bold group-hover:text-primary transition-colors">
-                {t.tournament_name}
-              </h4>
-              <p className="text-xs text-muted-foreground mt-2 line-clamp-1">
-                {t.venue_name || "Venue TBA"} •{" "}
-                {t.is_private ? "Private" : "Public"}
-              </p>
-              <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-                <span className="text-sm font-semibold">
-                  {t.entry_fee ? `Entry: ${t.entry_fee}` : "Free Entry"}
-                </span>
-                <span className="text-xs text-primary font-bold">Join Now</span>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+
     </div>
   );
 };

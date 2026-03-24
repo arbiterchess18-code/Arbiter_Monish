@@ -154,7 +154,7 @@ app.include_router(leaderboard.router,
 
 
 @app.get("/health")
-async def health_check():
+def health_check():
     return {"status": "healthy", "service": "Chess Orbiter Modular API"}
 
 if __name__ == "__main__":

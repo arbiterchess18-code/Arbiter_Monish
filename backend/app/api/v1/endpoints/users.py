@@ -100,7 +100,7 @@ async def get_my_profile(
 
 
 @router.get("/me/player-stats")
-async def get_my_player_stats(
+def get_my_player_stats(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -239,7 +239,7 @@ async def update_my_profile(
 
 
 @router.get("/me/achievements")
-async def get_my_achievements(
+def get_my_achievements(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -340,7 +340,7 @@ async def get_my_achievements(
 
 
 @router.get("/me/registrations")
-async def get_my_registrations(
+def get_my_registrations(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -354,7 +354,7 @@ async def get_my_registrations(
 
 
 @router.get("/me/tournaments")
-async def get_my_tournaments(
+def get_my_tournaments(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -405,7 +405,7 @@ async def get_my_tournaments(
 
 
 @router.get("/arbiters")
-async def get_all_arbiters(
+def get_all_arbiters(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -447,7 +447,7 @@ async def get_all_arbiters(
 
 
 @router.get("/{user_id}")
-async def get_user_details(
+def get_user_details(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)

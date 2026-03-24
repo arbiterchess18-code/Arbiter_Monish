@@ -55,7 +55,7 @@ def _extract_display_name(form_data: Dict[str, Any], fallback_name: str) -> str:
 
 
 @router.post("/{tournament_id}/matches/{match_id}/result")
-async def submit_match_result(
+def submit_match_result(
     tournament_id: int,
     match_id: int,
     result_data: MatchResultUpdate,
@@ -139,7 +139,7 @@ async def submit_match_result(
 
 
 @router.get("/{tournament_id}/pairings", response_model=PairingResponse)
-async def get_tournament_pairings(
+def get_tournament_pairings(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -212,7 +212,7 @@ async def get_tournament_pairings(
 
 
 @router.post("/{tournament_id}/rounds/{round_number}/finalize")
-async def finalize_round(
+def finalize_round(
     tournament_id: int,
     round_number: int,
     db: Session = Depends(get_db),
@@ -321,7 +321,7 @@ def _generate_pairings_for_round(db: Session, tournament: models.Tournament, rou
 
 
 @router.post("/{tournament_id}/pairings/start")
-async def start_pairing_round(
+def start_pairing_round(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -393,7 +393,7 @@ async def start_pairing_round(
 
 
 @router.post("/{tournament_id}/pairings/regenerate")
-async def regenerate_pairing_round(
+def regenerate_pairing_round(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -462,7 +462,7 @@ async def regenerate_pairing_round(
 
 
 @router.post("/{tournament_id}/seed-players")
-async def seed_players(
+def seed_players(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)

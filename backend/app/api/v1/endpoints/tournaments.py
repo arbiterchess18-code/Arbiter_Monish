@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.post("", response_model=TournamentResponse, status_code=status.HTTP_201_CREATED)
-async def create_tournament(
+def create_tournament(
     tournament: TournamentCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -74,7 +74,7 @@ async def create_tournament(
 
 
 @router.get("/public", response_model=List[TournamentResponse])
-async def get_public_tournaments(
+def get_public_tournaments(
     search: Optional[str] = None,
     type: Optional[str] = None,
     status: Optional[str] = None,
@@ -110,7 +110,7 @@ async def get_public_tournaments(
 
 
 @router.get("", response_model=List[TournamentResponse])
-async def list_tournaments(db: Session = Depends(get_db)):
+def list_tournaments(db: Session = Depends(get_db)):
     tournaments = db.query(models.Tournament).all()
     for t in tournaments:
         t.registered_count = db.query(models.TournamentRegistration).filter(
@@ -121,7 +121,7 @@ async def list_tournaments(db: Session = Depends(get_db)):
 
 
 @router.get("/arbiter", response_model=List[TournamentResponse])
-async def list_arbiter_tournaments(
+def list_arbiter_tournaments(
     role: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -158,7 +158,7 @@ async def list_arbiter_tournaments(
 
 
 @router.get("/stats/overview")
-async def get_statistics(
+def get_statistics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -269,7 +269,7 @@ async def get_statistics(
 
 
 @router.get("/{tournament_id}", response_model=TournamentResponse)
-async def get_tournament(tournament_id: int, db: Session = Depends(get_db)):
+def get_tournament(tournament_id: int, db: Session = Depends(get_db)):
     tournament = db.query(models.Tournament).filter(
         models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
@@ -278,7 +278,7 @@ async def get_tournament(tournament_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{tournament_id}", response_model=TournamentResponse)
-async def update_tournament(
+def update_tournament(
     tournament_id: int,
     tournament_update: TournamentUpdate,
     db: Session = Depends(get_db),
@@ -340,7 +340,7 @@ async def update_tournament(
 
 
 @router.delete("/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_tournament(
+def delete_tournament(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(
@@ -367,7 +367,7 @@ async def delete_tournament(
 
 
 @router.get("/{tournament_id}/view-details", response_model=TournamentViewDetailsResponse)
-async def get_tournament_view_details(
+def get_tournament_view_details(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -414,7 +414,7 @@ async def get_tournament_view_details(
 
 
 @router.get("/{tournament_id}/standings")
-async def get_standings(tournament_id: int, db: Session = Depends(get_db)):
+def get_standings(tournament_id: int, db: Session = Depends(get_db)):
     from ....logic.standings import calculate_standings
 
     tournament, standings_data = calculate_standings(db, tournament_id)

@@ -100,7 +100,7 @@ def _try_expand_color_history_column(db: Session) -> bool:
 
 
 @router.post("/{tournament_id}/registrations", response_model=TournamentRegistrationResponse, status_code=status.HTTP_201_CREATED)
-async def register_for_tournament(
+def register_for_tournament(
     tournament_id: int,
     registration_data: TournamentRegistrationCreate,
     db: Session = Depends(get_db),
@@ -256,7 +256,7 @@ async def register_for_tournament(
 
 
 @router.get("/{tournament_id}/registrations", response_model=List[TournamentRegistrationResponse])
-async def get_tournament_registrations(
+def get_tournament_registrations(
     tournament_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -308,7 +308,7 @@ async def get_tournament_registrations(
 
 
 @router.patch("/{tournament_id}/registrations/{registration_id}/status", response_model=TournamentRegistrationResponse)
-async def update_registration_status(
+def update_registration_status(
     tournament_id: int,
     registration_id: int,
     status_update: TournamentRegistrationStatusUpdate,
@@ -376,7 +376,7 @@ async def update_registration_status(
 
 
 @router.post("/{tournament_id}/registration-form-fields", response_model=RegistrationFormFieldResponse, status_code=status.HTTP_201_CREATED)
-async def create_form_field(
+def create_form_field(
     tournament_id: int,
     field: RegistrationFormFieldCreate,
     db: Session = Depends(get_db),
@@ -403,7 +403,7 @@ async def create_form_field(
 
 
 @router.get("/{tournament_id}/registration-form-fields", response_model=List[RegistrationFormFieldResponse])
-async def get_form_fields(tournament_id: int, db: Session = Depends(get_db)):
+def get_form_fields(tournament_id: int, db: Session = Depends(get_db)):
     fields = db.query(models.RegistrationFormField).filter(
         models.RegistrationFormField.tournament_id == tournament_id
     ).order_by(models.RegistrationFormField.field_order).all()
@@ -411,7 +411,7 @@ async def get_form_fields(tournament_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{tournament_id}/registration-form-fields", response_model=List[RegistrationFormFieldResponse])
-async def replace_form_fields(
+def replace_form_fields(
     tournament_id: int,
     fields: List[RegistrationFormFieldCreate],
     db: Session = Depends(get_db),
@@ -452,7 +452,7 @@ async def replace_form_fields(
 
 
 @router.put("/{tournament_id}/registration-form-fields/{field_id}", response_model=RegistrationFormFieldResponse)
-async def update_form_field(
+def update_form_field(
     tournament_id: int,
     field_id: int,
     field_update: RegistrationFormFieldCreate,
@@ -488,7 +488,7 @@ async def update_form_field(
 
 
 @router.delete("/{tournament_id}/registration-form-fields/{field_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_form_field(
+def delete_form_field(
     tournament_id: int,
     field_id: int,
     db: Session = Depends(get_db),
@@ -518,7 +518,7 @@ async def delete_form_field(
 
 
 @router.post("/{tournament_id}/registrations/bulk-import", response_model=BulkImportResponse)
-async def bulk_import_participants(
+def bulk_import_participants(
     tournament_id: int,
     import_data: BulkParticipantImport,
     db: Session = Depends(get_db),

@@ -10,7 +10,7 @@ from ....services.external_api import fetch_lichess_rating, fetch_chesstools_rat
 router = APIRouter()
 
 @router.get("/")
-async def get_leaderboard(
+def get_leaderboard(
     type: str = "fide", # fide, lichess, chesstools
     limit: int = 50,
     db: Session = Depends(get_db)

@@ -1,4 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+/* Hergon Grotesk Font Import */
+@font-face {
+  font-family: 'Hergon Grotesk';
+  src: url('/fonts/HergonGrotesk-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hergon Grotesk';
+  src: url('/fonts/HergonGrotesk-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hergon Grotesk';
+  src: url('/fonts/HergonGrotesk-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hergon Grotesk';
+  src: url('/fonts/HergonGrotesk-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @tailwind base;
 @tailwind components;
@@ -57,8 +85,8 @@
     --chess-gold: 43 80% 52%;
     --chess-silver: 220 10% 72%;
 
-    --font-display: 'Playfair Display', serif;
-    --font-body: 'DM Sans', sans-serif;
+    --font-display: 'Hergon Grotesk', sans-serif;
+    --font-body: 'Hergon Grotesk', sans-serif;
   }
 
   .dark {
@@ -121,6 +149,18 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+  }
+
+  /* Numeric Consistency */
+  .timer,
+  .score,
+  .stat,
+  .leaderboard,
+  [class*="timer"],
+  [class*="score"],
+  [class*="stat"],
+  [class*="leaderboard"] {
+    font-variant-numeric: tabular-nums;
   }
 
   h1,
