@@ -47,13 +47,13 @@ export default function LandingPage() {
               className="space-y-6"
             >
               <p className="inline-flex rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
-                Chess Orbiter Platform
+                Chaduranga Platform
               </p>
               <h1 className="font-display text-4xl font-extrabold tracking-tight md:text-5xl lg:text-6xl">
                 One Arena for Players, Arbiters, and Organizers
               </h1>
               <p className="max-w-2xl text-base text-muted-foreground md:text-lg">
-                Chess Orbiter is a complete tournament platform that simplifies
+                Chaduranga is a complete tournament platform that simplifies
                 registrations, pairings, match operations, and result tracking.
                 Start from one secure dashboard and scale to club-level or
                 championship-level events.

@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -7,9 +8,11 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 import httpx
+from pydantic import BaseModel, EmailStr
 
 from .... import models
 from ....database import get_db
@@ -19,9 +22,173 @@ import jwt
 from ....schemas.token import Token
 from ....schemas.user import UserCreate
 from ....services.fide import fetch_fide_player_info
+from ....services import email_service
 from ....core.limiter import limiter
 
 router = APIRouter()
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class VerifyOtpRequest(BaseModel):
+    otp_session_token: str
+    otp: str
+
+
+class SignupSendOtpRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+
+
+class SignupVerifyOtpRequest(BaseModel):
+    otp_session_token: str
+    otp: str
+
+
+RESET_PASSWORD_TOKEN_EXPIRE_MINUTES = 30
+OTP_TOKEN_EXPIRE_MINUTES = 10
+SIGNUP_VERIFICATION_TOKEN_EXPIRE_MINUTES = 30
+
+
+def _create_reset_password_token(email: str) -> str:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=RESET_PASSWORD_TOKEN_EXPIRE_MINUTES
+    )
+    return jwt.encode(
+        {
+            "sub": email,
+            "type": "reset_password",
+            "exp": int(expires_at.timestamp()),
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _create_otp_session_token(email: str, otp: str) -> str:
+    otp_hash = hashlib.sha256(
+        f"{otp}:{SECRET_KEY}".encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + \
+        timedelta(minutes=OTP_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {
+            "sub": email,
+            "type": "reset_password_otp",
+            "otp_hash": otp_hash,
+            "exp": int(expires_at.timestamp()),
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _decode_otp_session_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=400, detail="OTP expired") from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid OTP session") from exc
+
+    if payload.get("type") != "reset_password_otp":
+        raise HTTPException(status_code=400, detail="Invalid OTP session")
+    return payload
+
+
+def _create_signup_otp_session_token(email: str, otp: str) -> str:
+    otp_hash = hashlib.sha256(
+        f"{otp}:{SECRET_KEY}".encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + \
+        timedelta(minutes=OTP_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {
+            "sub": email,
+            "type": "signup_otp",
+            "otp_hash": otp_hash,
+            "exp": int(expires_at.timestamp()),
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _decode_signup_otp_session_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=400, detail="Signup OTP expired") from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid signup OTP session") from exc
+
+    if payload.get("type") != "signup_otp":
+        raise HTTPException(
+            status_code=400, detail="Invalid signup OTP session")
+    return payload
+
+
+def _create_signup_verification_token(email: str) -> str:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=SIGNUP_VERIFICATION_TOKEN_EXPIRE_MINUTES
+    )
+    return jwt.encode(
+        {
+            "sub": email,
+            "type": "signup_verified_email",
+            "exp": int(expires_at.timestamp()),
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _decode_signup_verification_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=400, detail="Signup verification expired") from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid signup verification") from exc
+
+    if payload.get("type") != "signup_verified_email":
+        raise HTTPException(
+            status_code=400, detail="Invalid signup verification")
+
+    email = (payload.get("sub") or "").strip().lower()
+    if not email:
+        raise HTTPException(
+            status_code=400, detail="Invalid signup verification")
+    return email
+
+
+def _decode_reset_password_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=400, detail="Reset token expired") from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid reset token") from exc
+
+    if payload.get("type") != "reset_password":
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    email = (payload.get("sub") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+    return email
 
 
 def _get_cookie_security() -> tuple[bool, str]:
@@ -180,6 +347,17 @@ def _resolve_frontend_origin(request: Request) -> str:
     return fallback
 
 
+def _get_google_callback_url() -> str:
+    explicit_callback_url = (
+        os.getenv("GOOGLE_REDIRECT_URI") or "").strip().rstrip("/")
+    if explicit_callback_url:
+        return explicit_callback_url
+
+    backend_public_url = os.getenv(
+        "BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
+    return f"{backend_public_url}/auth/google/callback"
+
+
 def _normalize_role(requested_role: str) -> str:
     role = (requested_role or "player").upper()
     if role == "ARBITER":
@@ -267,8 +445,6 @@ def login(request: Request, response: Response, form_data: OAuth2PasswordRequest
 @router.get("/auth/google/login")
 def google_login(request: Request, mode: str = Query(default="login"), role: str = Query(default="player")):
     google_client_id = os.getenv("GOOGLE_CLIENT_ID")
-    backend_public_url = os.getenv(
-        "BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
 
     if not google_client_id:
         raise HTTPException(
@@ -280,7 +456,7 @@ def google_login(request: Request, mode: str = Query(default="login"), role: str
     if normalized_mode == "signup":
         _ensure_signup_role_allowed(normalized_role)
 
-    callback_url = f"{backend_public_url}/auth/google/callback"
+    callback_url = _get_google_callback_url()
     frontend_origin = _resolve_frontend_origin(request)
     state = jwt.encode(
         {
@@ -306,18 +482,27 @@ def google_login(request: Request, mode: str = Query(default="login"), role: str
     return RedirectResponse(url=auth_url, status_code=302)
 
 
+@router.get("/api/v1/auth/google/login")
+async def google_login_alias(request: Request, mode: str = Query(default="login"), role: str = Query(default="player")):
+    return await google_login(request=request, mode=mode, role=role)
+
+
 @router.get("/auth/google/callback")
-async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def google_callback(code: Optional[str] = None, state: Optional[str] = None, db: Session = Depends(get_db)):
     google_client_id = os.getenv("GOOGLE_CLIENT_ID")
     google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    backend_public_url = os.getenv(
-        "BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
     frontend_url = os.getenv(
         "FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
     if not google_client_id or not google_client_secret:
         raise HTTPException(
             status_code=500, detail="Google OAuth is not configured")
+
+    if not code or not state:
+        return {
+            "message": "Google OAuth callback endpoint is reachable.",
+            "expected_query_params": ["code", "state"],
+        }
 
     oauth_state = _decode_google_oauth_state(state)
     oauth_mode = (oauth_state.get("mode") or "login").lower()
@@ -330,7 +515,7 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
     if state_frontend_url:
         frontend_url = state_frontend_url
 
-    callback_url = f"{backend_public_url}/auth/google/callback"
+    callback_url = _get_google_callback_url()
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         token_response = await client.post(
@@ -422,6 +607,11 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
     return response
 
 
+@router.get("/api/v1/auth/google/callback")
+async def google_callback_alias(code: Optional[str] = None, state: Optional[str] = None, db: Session = Depends(get_db)):
+    return await google_callback(code=code, state=state, db=db)
+
+
 @router.post("/refresh")
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
     secure, samesite = _get_cookie_security()
@@ -477,24 +667,181 @@ def logout(response: Response):
     return {"message": "Logged out successfully"}
 
 
+@router.post("/auth/forgot-password")
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    email = payload.email.strip().lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email
+    ).first()
+
+    # Prevent user enumeration by returning the same response whether user exists or not.
+    success_message = {
+        "message": "If an account with that email exists, a password reset link has been sent."
+    }
+
+    if not user:
+        return success_message
+
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    otp_session_token = _create_otp_session_token(email, otp)
+
+    email_service.send_password_reset_otp_email(
+        email=email,
+        otp=otp,
+        name=user.first_name or user.username or "Player",
+    )
+
+    return {
+        "message": "OTP has been sent to your email.",
+        "otp_session_token": otp_session_token,
+    }
+
+
+@router.post("/auth/verify-reset-otp")
+@limiter.limit("10/minute")
+async def verify_reset_otp(
+    request: Request,
+    payload: VerifyOtpRequest,
+):
+    otp = (payload.otp or "").strip()
+    if len(otp) != 6 or not otp.isdigit():
+        raise HTTPException(
+            status_code=400, detail="OTP must be a 6-digit code")
+
+    token_payload = _decode_otp_session_token(payload.otp_session_token)
+    expected_hash = token_payload.get("otp_hash")
+    submitted_hash = hashlib.sha256(
+        f"{otp}:{SECRET_KEY}".encode("utf-8")).hexdigest()
+
+    if submitted_hash != expected_hash:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    email = (token_payload.get("sub") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid OTP session")
+
+    reset_token = _create_reset_password_token(email)
+    return {
+        "message": "OTP verified successfully",
+        "reset_token": reset_token,
+    }
+
+
+@router.post("/auth/signup/send-otp")
+@limiter.limit("5/minute")
+async def signup_send_otp(
+    request: Request,
+    payload: SignupSendOtpRequest,
+    db: Session = Depends(get_db),
+):
+    email = payload.email.strip().lower()
+    existing_user = db.query(models.User).filter(
+        func.lower(models.User.email) == email
+    ).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    otp_session_token = _create_signup_otp_session_token(email, otp)
+    email_service.send_signup_otp_email(
+        email=email,
+        otp=otp,
+        name=(payload.name or "Player").strip() or "Player",
+    )
+
+    return {
+        "message": "Signup OTP sent to your email.",
+        "otp_session_token": otp_session_token,
+    }
+
+
+@router.post("/auth/signup/verify-otp")
+@limiter.limit("10/minute")
+async def signup_verify_otp(
+    request: Request,
+    payload: SignupVerifyOtpRequest,
+):
+    otp = (payload.otp or "").strip()
+    if len(otp) != 6 or not otp.isdigit():
+        raise HTTPException(
+            status_code=400, detail="OTP must be a 6-digit code")
+
+    token_payload = _decode_signup_otp_session_token(payload.otp_session_token)
+    expected_hash = token_payload.get("otp_hash")
+    submitted_hash = hashlib.sha256(
+        f"{otp}:{SECRET_KEY}".encode("utf-8")).hexdigest()
+
+    if submitted_hash != expected_hash:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    email = (token_payload.get("sub") or "").strip().lower()
+    signup_verification_token = _create_signup_verification_token(email)
+
+    return {
+        "message": "Email verified for signup",
+        "signup_verification_token": signup_verification_token,
+    }
+
+
+@router.post("/auth/reset-password")
+@limiter.limit("10/minute")
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    new_password = payload.new_password or ""
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be at least 8 characters long",
+        )
+
+    email = _decode_reset_password_token(payload.token)
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email
+    ).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid reset request")
+
+    user.hashed_password = get_password_hash(new_password)
+    db.add(user)
+    db.commit()
+
+    return {"message": "Password reset successful"}
+
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(
     user_in: UserCreate,
     role: Optional[str] = Query(default=None),
+    signup_verification_token: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
+    verified_email = _decode_signup_verification_token(
+        signup_verification_token)
+    user_email = user_in.email.strip().lower()
+    if verified_email != user_email:
+        raise HTTPException(
+            status_code=400, detail="Email is not verified for signup")
+
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(
             status_code=400, detail="Username already registered")
 
-    if db.query(models.User).filter(models.User.email == user_in.email).first():
+    if db.query(models.User).filter(func.lower(models.User.email) == user_email).first():
         raise HTTPException(
             status_code=400, detail="Email already registered")
 
     hashed_password = get_password_hash(user_in.password)
     new_user = models.User(
         username=user_in.username,
-        email=user_in.email,
+        email=user_email,
         hashed_password=hashed_password,
         first_name=user_in.first_name,
         last_name=user_in.last_name,

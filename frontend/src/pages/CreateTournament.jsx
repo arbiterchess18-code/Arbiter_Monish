@@ -138,7 +138,7 @@ export default function CreateTournament() {
       googleMapsLink: "https://maps.google.com/example",
       registrationType: "Free",
       entryFee: "0",
-      organizerName: "Chess Orbiter Foundation",
+      organizerName: "Chaduranga Foundation",
       isOrganizerVerified: true,
       eventType: "Standard",
       pairingSystem: "Swiss",
@@ -210,10 +210,14 @@ export default function CreateTournament() {
           existingTournament.pairingSystem ||
           (existingTournament.type === "Swiss System" ? "Swiss" : "Swiss"),
         eventType: existingTournament.eventType || prev.eventType,
-        customFields: existingTournament.customFields ?? prev.customFields ?? [],
-        prizeCategories: existingTournament.prizeCategories ?? prev.prizeCategories ?? [],
-        tie_break_config: existingTournament.tie_break_config ?? prev.tie_break_config ?? [],
-        sub_arbiters: existingTournament.sub_arbiters ?? prev.sub_arbiters ?? [],
+        customFields:
+          existingTournament.customFields ?? prev.customFields ?? [],
+        prizeCategories:
+          existingTournament.prizeCategories ?? prev.prizeCategories ?? [],
+        tie_break_config:
+          existingTournament.tie_break_config ?? prev.tie_break_config ?? [],
+        sub_arbiters:
+          existingTournament.sub_arbiters ?? prev.sub_arbiters ?? [],
       }));
 
       const existingFields = await getRegistrationFormFields(editTournamentId);

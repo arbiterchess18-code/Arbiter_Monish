@@ -196,7 +196,7 @@ export default function UserHome() {
         <div className="flex-1 space-y-4">
           <h2 className="text-2xl font-bold">Built for the Chess Community</h2>
           <p className="text-muted-foreground leading-relaxed">
-            ChessMgr is an open-source initiative dedicated to digitalizing
+            Chaduranga is an open-source initiative dedicated to digitalizing
             local and international chess circuits. We focus on providing
             low-latency scoreboards and anti-cheat integrations for both online
             and hybrid events.

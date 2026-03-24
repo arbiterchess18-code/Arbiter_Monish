@@ -9,8 +9,110 @@ load_dotenv()
 
 resend.api_key = os.getenv("RESEND_API_KEY")
 
+
+def send_password_reset_email(email: str, reset_url: str, name: str = "Player"):
+    if not resend.api_key:
+        print("RESEND_API_KEY is not configured; password reset email not sent")
+        return
+
+    from_email = os.getenv("PASSWORD_RESET_FROM_EMAIL",
+                           "onboarding@resend.dev")
+    subject = "Reset your password"
+    html_content = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2563eb;">Password Reset Request</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>We received a request to reset your password.</p>
+        <p>
+            <a href="{reset_url}" style="display: inline-block; background: #2563eb; color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 8px;">
+                Reset Password
+            </a>
+        </p>
+        <p>This link expires in 30 minutes.</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send(
+            {
+                "from": from_email,
+                "to": email,
+                "subject": subject,
+                "html": html_content,
+            }
+        )
+    except Exception as exc:
+        print(f"Failed to send password reset email to {email}: {exc}")
+
+
+def send_password_reset_otp_email(email: str, otp: str, name: str = "Player"):
+    if not resend.api_key:
+        print("RESEND_API_KEY is not configured; password reset OTP email not sent")
+        return
+
+    from_email = os.getenv("PASSWORD_RESET_FROM_EMAIL",
+                           "onboarding@resend.dev")
+    subject = "Your password reset OTP"
+    html_content = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2563eb;">Password Reset OTP</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>Use the OTP below to reset your password:</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; margin: 12px 0;">{otp}</p>
+        <p>This OTP expires in 10 minutes.</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send(
+            {
+                "from": from_email,
+                "to": email,
+                "subject": subject,
+                "html": html_content,
+            }
+        )
+    except Exception as exc:
+        print(f"Failed to send password reset OTP email to {email}: {exc}")
+
+
+def send_signup_otp_email(email: str, otp: str, name: str = "Player"):
+    if not resend.api_key:
+        print("RESEND_API_KEY is not configured; signup OTP email not sent")
+        return
+
+    from_email = os.getenv("PASSWORD_RESET_FROM_EMAIL",
+                           "onboarding@resend.dev")
+    subject = "Verify your email for signup"
+    html_content = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2563eb;">Email Verification OTP</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>Use this OTP to complete your signup:</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; margin: 12px 0;">{otp}</p>
+        <p>This OTP expires in 10 minutes.</p>
+        <p>If you did not request this signup, you can safely ignore this email.</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send(
+            {
+                "from": from_email,
+                "to": email,
+                "subject": subject,
+                "html": html_content,
+            }
+        )
+    except Exception as exc:
+        print(f"Failed to send signup OTP email to {email}: {exc}")
+
+
 def send_tournament_started_email(db: Session, tournament_id: int):
-    tournament = db.query(models.Tournament).filter(models.Tournament.tournament_id == tournament_id).first()
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
         return
 
@@ -53,6 +155,7 @@ def send_tournament_started_email(db: Session, tournament_id: int):
         except Exception as e:
             print(f"Failed to send start email to {player.email}: {e}")
 
+
 def send_tournament_results_email(db: Session, tournament_id: int):
     tournament, standings = calculate_standings(db, tournament_id)
     if not tournament or not standings:
@@ -66,7 +169,8 @@ def send_tournament_results_email(db: Session, tournament_id: int):
     top_3_html += "</ul>"
 
     # Get tie-break names for personalized summary
-    tb_config = tournament.tie_break_config or ["Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Number of Wins", "Direct Encounter"]
+    tb_config = tournament.tie_break_config or [
+        "Buchholz Cut-1", "Buchholz", "Sonneborn-Berger", "Number of Wins", "Direct Encounter"]
     top_tbs = [tb for tb in tb_config if tb != "Direct Encounter"][:3]
 
     for p in standings:
