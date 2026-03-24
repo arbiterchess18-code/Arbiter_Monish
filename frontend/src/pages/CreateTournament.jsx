@@ -122,7 +122,7 @@ export default function CreateTournament() {
       .split("T")[0];
 
     const demoData = {
-      name: "Chess Arena Masters 2024",
+      name: "Chaduranga Masters 2024",
       startDate: today,
       startTime: "10:00",
       endDate: nextWeek,

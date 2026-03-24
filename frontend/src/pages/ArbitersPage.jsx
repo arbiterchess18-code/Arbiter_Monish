@@ -61,7 +61,7 @@ const ArbitersPage = () => {
       <div className="space-y-8">
         <PageHeader
           title="Registered Arbiters"
-          description="View all arbiters registered in the Chess Arena application."
+          description="View all arbiters registered in the Chaduranga application."
         />
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
@@ -77,7 +77,7 @@ const ArbitersPage = () => {
     <div className="space-y-8 pb-10">
       <PageHeader
         title="Registered Arbiters"
-        description="View all arbiters registered in the Chess Arena application."
+        description="View all arbiters registered in the Chaduranga application."
       />
 
       {error && (

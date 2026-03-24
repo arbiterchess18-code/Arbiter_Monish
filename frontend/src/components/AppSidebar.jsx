@@ -94,7 +94,7 @@ export function AppSidebar() {
             <Crown className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-display font-bold text-base">ChessArena</h2>
+            <h2 className="font-display font-bold text-base">Chaduranga</h2>
             <p className="text-[11px] text-muted-foreground capitalize">
               {role} Panel
             </p>
