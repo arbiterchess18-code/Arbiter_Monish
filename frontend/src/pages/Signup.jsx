@@ -25,11 +25,30 @@ const Signup = () => {
   const [isPasswordShown, setIsPasswordShown] = useState(false);
   const [isConfirmShown, setIsConfirmShown] = useState(false);
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
+  const [signupAuthMessage, setSignupAuthMessage] = useState("");
+
+  const restrictedSignupRoles = new Set(["arbiter", "organization"]);
 
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
   const toggleConfirm = () => setIsConfirmShown(!isConfirmShown);
 
+  const handleRoleChange = (selectedRole) => {
+    if (restrictedSignupRoles.has(selectedRole)) {
+      setRole("player");
+      setSignupAuthMessage("You are not authorized for this signup.");
+      return;
+    }
+
+    setRole(selectedRole);
+    setSignupAuthMessage("");
+  };
+
   const handleGoogleSignup = () => {
+    if (restrictedSignupRoles.has(role)) {
+      setSignupAuthMessage("You are not authorized for this signup.");
+      return;
+    }
+
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
     const params = new URLSearchParams({ mode: "signup", role });
     window.location.href = `${apiUrl}/auth/google/login?${params.toString()}`;
@@ -37,6 +56,12 @@ const Signup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (restrictedSignupRoles.has(role)) {
+      setSignupAuthMessage("You are not authorized for this signup.");
+      return;
+    }
+
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
 
@@ -158,7 +183,7 @@ const Signup = () => {
             <div className="login__box">
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={(e) => handleRoleChange(e.target.value)}
                 className="login__input"
               >
                 <option value="player">Player</option>
@@ -166,6 +191,18 @@ const Signup = () => {
                 <option value="organization">Organization</option>
               </select>
             </div>
+
+            {signupAuthMessage && (
+              <p
+                style={{
+                  color: "#dc2626",
+                  fontSize: "0.875rem",
+                  marginBottom: "8px",
+                }}
+              >
+                {signupAuthMessage}
+              </p>
+            )}
 
             <button
               type="button"

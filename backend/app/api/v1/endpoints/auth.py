@@ -189,6 +189,14 @@ def _normalize_role(requested_role: str) -> str:
     return "PLAYER"
 
 
+def _ensure_signup_role_allowed(role_name: str) -> None:
+    if role_name in {"ARBITER", "ORGANIZATION"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized for this signup.",
+        )
+
+
 def _ensure_role_assignment(db: Session, user: models.User, role_name: str) -> None:
     from sqlalchemy import func
 
@@ -266,12 +274,18 @@ async def google_login(request: Request, mode: str = Query(default="login"), rol
         raise HTTPException(
             status_code=500, detail="Google OAuth is not configured")
 
+    normalized_mode = (mode or "login").lower()
+    normalized_role = _normalize_role(role)
+
+    if normalized_mode == "signup":
+        _ensure_signup_role_allowed(normalized_role)
+
     callback_url = f"{backend_public_url}/auth/google/callback"
     frontend_origin = _resolve_frontend_origin(request)
     state = jwt.encode(
         {
-            "mode": mode,
-            "role": role,
+            "mode": normalized_mode,
+            "role": normalized_role,
             "frontend_url": frontend_origin,
             "exp": int((datetime.now(timezone.utc) + timedelta(minutes=10)).timestamp()),
         },
@@ -306,7 +320,11 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
             status_code=500, detail="Google OAuth is not configured")
 
     oauth_state = _decode_google_oauth_state(state)
+    oauth_mode = (oauth_state.get("mode") or "login").lower()
     requested_role = _normalize_role(oauth_state.get("role", "player"))
+    if oauth_mode == "signup":
+        _ensure_signup_role_allowed(requested_role)
+
     state_frontend_url = (oauth_state.get("frontend_url")
                           or "").strip().rstrip("/")
     if state_frontend_url:
@@ -386,7 +404,7 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
             db.add(existing_user)
             db.commit()
 
-    if user_created or oauth_state.get("mode") == "signup":
+    if user_created or oauth_mode == "signup":
         _ensure_role_assignment(db, existing_user, requested_role)
 
     auth_payload = _create_auth_payload(existing_user)
@@ -504,12 +522,9 @@ async def signup(
     db.commit()
     db.refresh(new_user)
 
-    requested_role = (role or user_in.role or "player").upper()
-    role_name = "PLAYER"
-    if requested_role == "ARBITER":
-        role_name = "ARBITER"
-    elif requested_role == "ORGANIZATION":
-        role_name = "ORGANIZATION"
+    requested_role = _normalize_role(role or user_in.role or "player")
+    _ensure_signup_role_allowed(requested_role)
+    role_name = requested_role
 
     from sqlalchemy import func
     target_role = db.query(models.Role).filter(
