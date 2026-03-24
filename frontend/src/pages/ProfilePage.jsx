@@ -463,12 +463,12 @@ export default function ProfilePage() {
                       <Input className="mt-1.5" value={draftProfile.fide_id} onChange={(e) => setDraftProfile((p) => ({ ...p, fide_id: e.target.value }))} placeholder="e.g. 1234567" />
                     </div>
                     <div>
-                      <Label>FIDE Rating</Label>
-                      <Input className="mt-1.5" type="number" value={draftProfile.rating || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, rating: parseInt(e.target.value) || 0 }))} placeholder="e.g. 1800" />
+                      <Label className="flex items-center gap-2">FIDE Rating <span className="text-[10px] text-muted-foreground font-normal">(Auto-synced)</span></Label>
+                      <Input className="mt-1.5 bg-muted/50 text-muted-foreground" type="number" value={draftProfile.rating || ""} disabled placeholder="Fetched automatically" />
                     </div>
                     <div>
-                      <Label>National Rating</Label>
-                      <Input className="mt-1.5" type="number" value={draftProfile.national_rating || ""} onChange={(e) => setDraftProfile((p) => ({ ...p, national_rating: parseInt(e.target.value) || 0 }))} placeholder="e.g. 1750" />
+                      <Label className="flex items-center gap-2">National Rating <span className="text-[10px] text-muted-foreground font-normal">(Auto-synced)</span></Label>
+                      <Input className="mt-1.5 bg-muted/50 text-muted-foreground" type="number" value={draftProfile.national_rating || ""} disabled placeholder="Fetched automatically" />
                     </div>
                     <div>
                       <Label>Country</Label>
