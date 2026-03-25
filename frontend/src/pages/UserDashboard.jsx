@@ -5,7 +5,6 @@ import { Trophy, Swords, Target, TrendingUp, Zap, Award, Crown, Star, Loader2 } 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-import { mockRatingHistory } from "@/lib/mock-data";
 import { apiFetch } from "@/lib/api";
 
 const COLORS = [
@@ -27,16 +26,26 @@ const ACHIEVEMENTS_DATA = [
 export default function UserDashboard() {
   const [unlocked, setUnlocked] = useState([]);
   const [stats, setStats] = useState({});
+  const [ratingHistory, setRatingHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        const res = await apiFetch(`${import.meta.env.VITE_API_URL}/users/me/achievements`);
-        if (res.ok) {
-          const data = await res.json();
-          setUnlocked(data.unlocked || []);
-          setStats(data.stats || {});
+        const [achRes, profRes] = await Promise.all([
+          apiFetch(`${import.meta.env.VITE_API_URL}/users/me/achievements`),
+          apiFetch(`${import.meta.env.VITE_API_URL}/users/me`)
+        ]);
+
+        if (achRes.ok) {
+          const achData = await achRes.json();
+          setUnlocked(achData.unlocked || []);
+          setStats(achData.stats || {});
+        }
+
+        if (profRes.ok) {
+          const profData = await profRes.json();
+          setRatingHistory(profData.rating_history || []);
         }
       } catch (err) {
         console.error(err);
@@ -81,13 +90,19 @@ export default function UserDashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2 stat-card">
           <h2 className="font-display font-semibold text-lg mb-4">Rating Progression</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={mockRatingHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis domain={["dataMin - 30", "dataMax + 30"]} stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
-              <Line type="monotone" dataKey="rating" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ fill: "hsl(var(--primary))", r: 4 }} />
-            </LineChart>
+            {ratingHistory.length > 0 ? (
+              <LineChart data={ratingHistory}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis domain={["dataMin - 30", "dataMax + 30"]} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                <Line type="monotone" dataKey="rating" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ fill: "hsl(var(--primary))", r: 4 }} />
+              </LineChart>
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-foreground text-sm border border-dashed rounded-lg">
+                No rating history available yet
+              </div>
+            )}
           </ResponsiveContainer>
         </motion.div>
 

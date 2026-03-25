@@ -5,26 +5,49 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { motion } from "framer-motion";
-import { mockMatchHistory } from "@/lib/mock-data";
+import { apiFetch } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect } from "react";
 
 const resultStyle = {
   "1-0": "bg-success/15 text-success border-success/30",
   "0-1": "bg-destructive/15 text-destructive border-destructive/30",
+  "1/2-1/2": "bg-warning/15 text-warning-foreground border-warning/30",
   "½-½": "bg-warning/15 text-warning-foreground border-warning/30",
+  "Bye": "bg-success/15 text-success border-success/30",
 };
 
 export default function MatchHistoryPage() {
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [tournamentFilter, setTournamentFilter] = useState("all");
 
-  const tournamentNames = useMemo(() => {
-    const names = [...new Set(mockMatchHistory.map(m => m.tournamentName))];
-    return names;
+  useEffect(() => {
+    const fetchMatches = async () => {
+      try {
+        const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/me/matches`);
+        if (response.ok) {
+          const data = await response.json();
+          setMatches(data);
+        }
+      } catch (error) {
+        console.error("Error fetching match history:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMatches();
   }, []);
 
+  const tournamentNames = useMemo(() => {
+    const names = [...new Set(matches.map(m => m.tournamentName))];
+    return names;
+  }, [matches]);
+
   const filtered = useMemo(() => {
-    if (tournamentFilter === "all") return mockMatchHistory;
-    return mockMatchHistory.filter(m => m.tournamentName === tournamentFilter);
-  }, [tournamentFilter]);
+    if (tournamentFilter === "all") return matches;
+    return matches.filter(m => m.tournamentName === tournamentFilter);
+  }, [tournamentFilter, matches]);
 
   return (
     <div className="space-y-6">
@@ -56,7 +79,19 @@ export default function MatchHistoryPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-6 w-16 mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-12 mx-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                </TableRow>
+              ))
+            ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No matches found</TableCell>
               </TableRow>
@@ -70,7 +105,7 @@ export default function MatchHistoryPage() {
                     <TableCell className={isUserWhite ? "font-medium" : ""}>{m.white}</TableCell>
                     <TableCell className={!isUserWhite ? "font-medium" : ""}>{m.black}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={resultStyle[m.result]}>{m.result}</Badge>
+                      <Badge variant="outline" className={resultStyle[m.result] || ""}>{m.result}</Badge>
                     </TableCell>
                     <TableCell className="text-center">
                       <span className={`inline-flex items-center gap-1 text-sm font-medium ${m.ratingChange > 0 ? "text-success" : m.ratingChange < 0 ? "text-destructive" : "text-muted-foreground"}`}>

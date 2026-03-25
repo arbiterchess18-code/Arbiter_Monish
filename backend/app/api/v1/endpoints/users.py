@@ -8,6 +8,7 @@ from .... import models
 from ....database import get_db
 from ....core.security import get_current_user
 from ....services.fide import get_fide_history_cached, fetch_fide_player_info
+from ....schemas.match import UserMatchResponse
 
 router = APIRouter()
 
@@ -503,3 +504,61 @@ def get_user_details(
         "profile_picture_url": user.profile_picture_url,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
+
+
+@router.get("/me/matches", response_model=List[UserMatchResponse])
+def get_my_match_history(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current logged-in user's match history (games played)"""
+    results = db.query(models.Match, models.Tournament, models.Round).join(
+        models.Tournament, models.Match.tournament_id == models.Tournament.tournament_id
+    ).join(
+        models.Round, models.Match.round_id == models.Round.round_id
+    ).filter(
+        or_(
+            models.Match.white_player_id == current_user.user_id,
+            models.Match.black_player_id == current_user.user_id
+        )
+    ).all()
+
+    match_history = []
+    for match, tournament, round_obj in results:
+        # Fetch opponent names
+        white_player = db.query(models.User).filter(
+            models.User.user_id == match.white_player_id
+        ).first() if match.white_player_id else None
+        
+        black_player = db.query(models.User).filter(
+            models.User.user_id == match.black_player_id
+        ).first() if match.black_player_id else None
+
+        white_name = "You" if match.white_player_id == current_user.user_id else (
+            f"{white_player.first_name or ''} {white_player.last_name or ''}".strip() or white_player.username
+            if white_player else "Unknown"
+        )
+        
+        black_name = "You" if match.black_player_id == current_user.user_id else (
+            (f"{black_player.first_name or ''} {black_player.last_name or ''}".strip() or black_player.username)
+            if black_player else "BYE"
+        )
+
+        match_history.append({
+            "id": match.match_id,
+            "tournamentName": tournament.tournament_name,
+            "round": round_obj.round_number,
+            "white": white_name,
+            "black": black_name,
+            "result": match.result,
+            "ratingChange": 0,  # Rating change tracking not fully implemented per match
+            "date": match.created_at.strftime("%Y-%m-%d") if match.created_at else "N/A"
+        })
+
+    # Sort matches by most recent first
+    match_history.sort(
+        key=lambda x: x["date"] if x["date"] != "N/A" else "0000-00-00",
+        reverse=True
+    )
+    
+    return match_history

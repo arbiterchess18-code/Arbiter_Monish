@@ -22,3 +22,16 @@ class PairingResponse(BaseModel):
     tie_breaker_rules: List[str]
     rounds_info: List[dict] = []
     pairings: List[MatchBase]
+
+class UserMatchResponse(BaseModel):
+    id: int
+    tournamentName: str
+    round: int
+    white: str
+    black: str
+    result: Optional[str] = None
+    ratingChange: int = 0
+    date: str
+
+class UserMatchHistoryList(BaseModel):
+    matches: List[UserMatchResponse]
