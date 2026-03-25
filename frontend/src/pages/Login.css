@@ -13,17 +13,18 @@
   justify-content: center;
   padding: 1.5rem;
   font-family: "DM Sans", sans-serif;
+  overflow-y: auto;
 }
 
 .login__container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  width: 100%;
-  max-width: 1100px;
+  width: min(1100px, 100%);
   background-color: hsl(var(--card));
   border-radius: 2rem;
   overflow: hidden;
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.1);
+  max-height: min(92vh, 900px);
 }
 
 .login__swiper {
@@ -70,6 +71,12 @@
   padding: 3.5rem;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.login__form {
+  width: 100%;
 }
 
 .login__title {
@@ -266,9 +273,15 @@
 }
 
 @media screen and (max-width: 900px) {
+  .login {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
   .login__container {
     grid-template-columns: 1fr;
     max-width: 500px;
+    max-height: none;
   }
 
   .login__swiper {
@@ -276,6 +289,6 @@
   }
 
   .login__area {
-    padding: 2.5rem;
+    padding: 1.5rem;
   }
 }
