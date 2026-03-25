@@ -13,8 +13,6 @@ import "remixicon/fonts/remixicon.css";
 // Online Chess Images
 const img1 =
   "https://images.unsplash.com/photo-1528819622765-d6bcf132f793?q=80&w=2070&auto=format&fit=crop";
-const img2 =
-  "https://images.unsplash.com/photo-1586161393730-681dc2379740?q=80&w=2072&auto=format&fit=crop";
 const img3 =
   "https://images.unsplash.com/photo-1529699211952-734e80c4d42b?q=80&w=2071&auto=format&fit=crop";
 
@@ -99,10 +97,7 @@ const Login = () => {
               <img src={img1} alt="Slide 1" className="login__swiper-img" />
             </SwiperSlide>
             <SwiperSlide>
-              <img src={img2} alt="Slide 2" className="login__swiper-img" />
-            </SwiperSlide>
-            <SwiperSlide>
-              <img src={img3} alt="Slide 3" className="login__swiper-img" />
+              <img src={img3} alt="Slide 2" className="login__swiper-img" />
             </SwiperSlide>
           </Swiper>
         </div>

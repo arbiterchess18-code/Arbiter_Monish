@@ -180,10 +180,7 @@ const Signup = () => {
               <img src={i1} alt="Slide 1" className="login__swiper-img" />
             </SwiperSlide>
             <SwiperSlide>
-              <img src={i2} alt="Slide 2" className="login__swiper-img" />
-            </SwiperSlide>
-            <SwiperSlide>
-              <img src={i3} alt="Slide 3" className="login__swiper-img" />
+              <img src={i3} alt="Slide 2" className="login__swiper-img" />
             </SwiperSlide>
           </Swiper>
         </div>
