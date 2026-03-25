@@ -1,28 +1,28 @@
 /* Hergon Grotesk Font Import */
 @font-face {
   font-family: 'Hergon Grotesk';
-  src: url('/fonts/HergonGrotesk-Regular.woff2') format('woff2');
+  src: url('/fonts/HergonGrotesk-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: 'Hergon Grotesk';
-  src: url('/fonts/HergonGrotesk-Medium.woff2') format('woff2');
+  src: url('/fonts/HergonGrotesk-Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: 'Hergon Grotesk';
-  src: url('/fonts/HergonGrotesk-SemiBold.woff2') format('woff2');
+  src: url('/fonts/HergonGrotesk-SemiBold.ttf') format('truetype');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: 'Hergon Grotesk';
-  src: url('/fonts/HergonGrotesk-Bold.woff2') format('woff2');
+  src: url('/fonts/HergonGrotesk-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
