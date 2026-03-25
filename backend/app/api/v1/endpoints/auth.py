@@ -823,12 +823,13 @@ async def signup(
     signup_verification_token: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
-    verified_email = _decode_signup_verification_token(
-        signup_verification_token)
     user_email = user_in.email.strip().lower()
-    if verified_email != user_email:
-        raise HTTPException(
-            status_code=400, detail="Email is not verified for signup")
+    if signup_verification_token:
+        verified_email = _decode_signup_verification_token(
+            signup_verification_token)
+        if verified_email != user_email:
+            raise HTTPException(
+                status_code=400, detail="Email is not verified for signup")
 
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(
@@ -886,5 +887,10 @@ async def signup(
     db.add(models.UserRole(user_id=new_user.user_id,
            role_id=target_role.role_id))
     db.commit()
+
+    email_service.send_onesignal_signup_email(
+        email=new_user.email,
+        name=(new_user.first_name or new_user.username or "Player"),
+    )
 
     return {"message": "User created successfully"}

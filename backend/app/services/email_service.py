@@ -1,5 +1,6 @@
 import resend
 import os
+import httpx
 from sqlalchemy.orm import Session
 from .. import models
 from ..logic.standings import calculate_standings
@@ -8,6 +9,50 @@ from dotenv import load_dotenv
 load_dotenv()
 
 resend.api_key = os.getenv("RESEND_API_KEY")
+
+
+def send_onesignal_signup_email(email: str, name: str = "Player"):
+    app_id = os.getenv("ONESIGNAL_APP_ID")
+    rest_api_key = os.getenv("ONESIGNAL_REST_API_KEY")
+    from_name = os.getenv("ONESIGNAL_EMAIL_FROM_NAME", "Chess Arena")
+
+    if not app_id or not rest_api_key:
+        print("OneSignal email skipped: ONESIGNAL_APP_ID or ONESIGNAL_REST_API_KEY missing")
+        return
+
+    payload = {
+        "app_id": app_id,
+        "include_email_tokens": [email],
+        "email_subject": "Welcome to Chess Arena",
+        "email_from_name": from_name,
+        "email_body": (
+            f"<div style='font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #eee;"
+            f"padding:20px;border-radius:10px;'>"
+            f"<h2 style='color:#2563eb;'>Welcome to Chess Arena</h2>"
+            f"<p>Hello <strong>{name}</strong>,</p>"
+            f"<p>Your account has been created successfully.</p>"
+            f"<p>You will receive important updates about your activity and tournaments here.</p>"
+            f"</div>"
+        ),
+    }
+
+    headers = {
+        "Authorization": f"Basic {rest_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = httpx.post(
+            "https://onesignal.com/api/v1/notifications",
+            json=payload,
+            headers=headers,
+            timeout=20.0,
+        )
+        if response.status_code >= 400:
+            print(
+                f"OneSignal signup email failed for {email}: {response.status_code} {response.text}")
+    except Exception as exc:
+        print(f"OneSignal signup email error for {email}: {exc}")
 
 
 def send_password_reset_email(email: str, reset_url: str, name: str = "Player"):

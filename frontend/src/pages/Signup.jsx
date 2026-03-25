@@ -26,15 +26,26 @@ const Signup = () => {
   const [isConfirmShown, setIsConfirmShown] = useState(false);
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
   const [signupAuthMessage, setSignupAuthMessage] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSessionToken, setOtpSessionToken] = useState("");
-  const [signupVerificationToken, setSignupVerificationToken] = useState("");
-  const [verifying, setVerifying] = useState(false);
 
   const restrictedSignupRoles = new Set(["arbiter", "organization"]);
 
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
   const toggleConfirm = () => setIsConfirmShown(!isConfirmShown);
+
+  const syncOneSignalUser = async (userId, email) => {
+    if (!window.OneSignalDeferred || !userId || !email) {
+      return;
+    }
+
+    window.OneSignalDeferred.push(async function (OneSignal) {
+      try {
+        await OneSignal.login(String(userId));
+        await OneSignal.User.addEmail(email);
+      } catch (error) {
+        console.error("OneSignal user sync failed:", error);
+      }
+    });
+  };
 
   const handleRoleChange = (selectedRole) => {
     if (restrictedSignupRoles.has(selectedRole)) {
@@ -69,86 +80,8 @@ const Signup = () => {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
 
-    if (!otpSessionToken) {
-      try {
-        const sendOtpResponse = await apiFetch(
-          `${import.meta.env.VITE_API_URL}/auth/signup/send-otp`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: data.email,
-              name: `${data.firstName || ""} ${data.lastName || ""}`.trim(),
-            }),
-          },
-        );
-
-        const otpPayload = await sendOtpResponse.json();
-        if (!sendOtpResponse.ok) {
-          alert(otpPayload.detail || "Unable to send signup OTP");
-          return;
-        }
-
-        setOtpSessionToken(otpPayload.otp_session_token || "");
-        setSignupAuthMessage("OTP sent to your email. Enter OTP to continue.");
-        return;
-      } catch (error) {
-        console.error("Signup OTP send error:", error);
-        alert("Connection error. Is the backend running?");
-        return;
-      }
-    }
-
-    let verifiedToken = signupVerificationToken;
-
-    if (!verifiedToken) {
-      if (!otp || otp.length !== 6) {
-        alert("Please enter the 6-digit OTP sent to your email.");
-        return;
-      }
-
-      setVerifying(true);
-      try {
-        const verifyResponse = await apiFetch(
-          `${import.meta.env.VITE_API_URL}/auth/signup/verify-otp`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              otp_session_token: otpSessionToken,
-              otp,
-            }),
-          },
-        );
-
-        const verifyPayload = await verifyResponse.json();
-        if (!verifyResponse.ok) {
-          alert(verifyPayload.detail || "Invalid OTP");
-          return;
-        }
-
-        verifiedToken = verifyPayload.signup_verification_token || "";
-        setSignupVerificationToken(verifiedToken);
-      } catch (error) {
-        console.error("Signup OTP verify error:", error);
-        alert("Connection error. Is the backend running?");
-        return;
-      } finally {
-        setVerifying(false);
-      }
-    }
-
     if (data.password !== formData.get("confirmPassword")) {
       alert("Password and confirm password do not match.");
-      return;
-    }
-
-    if (!verifiedToken) {
-      alert("Email verification failed. Please request OTP again.");
       return;
     }
 
@@ -167,9 +100,7 @@ const Signup = () => {
       }
 
       const response = await apiFetch(
-        `${import.meta.env.VITE_API_URL}/signup?role=${role}&signup_verification_token=${encodeURIComponent(
-          verifiedToken,
-        )}`,
+        `${import.meta.env.VITE_API_URL}/signup?role=${role}`,
         {
           method: "POST",
           headers: {
@@ -205,6 +136,11 @@ const Signup = () => {
         const loginData = await loginResponse.json();
         sessionStorage.setItem("userData", JSON.stringify(loginData.userData));
         window.dispatchEvent(new Event("authChange"));
+
+        await syncOneSignalUser(
+          loginData.userData?.user_id,
+          loginData.userData?.email,
+        );
 
         // Redirect based on role
         if (
@@ -286,24 +222,6 @@ const Signup = () => {
               >
                 {signupAuthMessage}
               </p>
-            )}
-
-            {otpSessionToken && (
-              <div className="login__box" style={{ marginBottom: "8px" }}>
-                <input
-                  name="signupOtp"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  placeholder="Enter 6-digit OTP"
-                  className="login__input"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                  required
-                />
-                <i className="ri-lock-password-line"></i>
-              </div>
             )}
 
             <button
@@ -465,11 +383,7 @@ const Signup = () => {
             </div>
 
             <button type="submit" className="login__button">
-              {!otpSessionToken
-                ? "Send OTP"
-                : verifying
-                  ? "Verifying..."
-                  : "Verify OTP & Sign Up"}
+              Submit
             </button>
 
             <Link to="/forgot-password" className="login__forgot">
