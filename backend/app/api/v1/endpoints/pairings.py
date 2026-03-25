@@ -54,6 +54,19 @@ def _extract_display_name(form_data: Dict[str, Any], fallback_name: str) -> str:
     return fallback_name
 
 
+def _normalize_match_result(raw_result: str) -> str:
+    normalized = (raw_result or "").strip()
+
+    allowed_results = {"1-0", "0-1", "1/2-1/2", "0-0", "Bye"}
+    if normalized not in allowed_results:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid result. Allowed: 1-0, 0-1, 1/2-1/2, 0-0, Bye",
+        )
+
+    return normalized
+
+
 @router.post("/{tournament_id}/matches/{match_id}/result")
 def submit_match_result(
     tournament_id: int,
@@ -79,7 +92,7 @@ def submit_match_result(
         raise HTTPException(status_code=404, detail="Match not found")
 
     old_result = match.result
-    new_result = result_data.result
+    new_result = _normalize_match_result(result_data.result)
 
     # Update Match
     match.result = new_result
@@ -102,6 +115,8 @@ def submit_match_result(
             return 0.0 if player_color == "white" else 1.0
         if res == "1/2-1/2":
             return 0.5
+        if res == "0-0":
+            return 0.0
         if res == "Bye":
             return 1.0 if player_color == "white" else 0.0
         return 0.0
@@ -126,7 +141,7 @@ def submit_match_result(
     db.commit()
 
     # Fire result notifications for both players (skip BYE — black is None)
-    if match.black_player_id and new_result in ("1-0", "0-1", "1/2-1/2"):
+    if match.black_player_id and new_result in ("1-0", "0-1", "1/2-1/2", "0-0"):
         notification_service.notify_match_result(
             db,
             match=match,

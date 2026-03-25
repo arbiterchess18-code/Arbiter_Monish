@@ -424,7 +424,7 @@ export default function TournamentDetails() {
   );
 
   // Fix 3: robust result check — only count known valid results as "played"
-  const isMatchPlayed = (res) => ["1-0", "0-1", "1/2-1/2"].includes(res);
+  const isMatchPlayed = (res) => ["1-0", "0-1", "1/2-1/2", "0-0"].includes(res);
 
   const filteredPairings = pairings.filter(
     (p) => p.round_number === selectedRound,
@@ -510,6 +510,7 @@ export default function TournamentDetails() {
     if (!isWhite && !isBlack) return null;
     if (match.result === "Bye") return "Bye";
     if (match.result === "1/2-1/2") return "Draw";
+    if (match.result === "0-0") return "0 points";
     if (match.result === "1-0") return isWhite ? "Win" : "Loss";
     if (match.result === "0-1") return isBlack ? "Win" : "Loss";
 
@@ -520,6 +521,7 @@ export default function TournamentDetails() {
     Win: "bg-success/15 text-success border-success/30",
     Loss: "bg-destructive/15 text-destructive border-destructive/30",
     Draw: "bg-info/15 text-info border-info/30",
+    "0 points": "bg-warning/15 text-warning border-warning/30",
     Bye: "bg-muted text-muted-foreground border-border",
   };
 
@@ -882,8 +884,6 @@ export default function TournamentDetails() {
                 )}
             </CardContent>
           </Card>
-
-
         </TabsContent>
 
         <TabsContent value="participants" className="mt-4">
@@ -1134,8 +1134,6 @@ export default function TournamentDetails() {
                 )}
               </CardContent>
             </Card>
-
-
           </div>
         </TabsContent>
 
@@ -1247,7 +1245,7 @@ export default function TournamentDetails() {
                           pairings.length > 0 && (
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
-                                {["1-0", "1/2-1/2", "0-1"].map((r) => (
+                                {["1-0", "1/2-1/2", "0-1", "0-0"].map((r) => (
                                   <Button
                                     key={r}
                                     size="sm"
@@ -1540,8 +1538,6 @@ export default function TournamentDetails() {
                 </div>
               </CardContent>
             </Card>
-
-
           </div>
         </TabsContent>
       </Tabs>

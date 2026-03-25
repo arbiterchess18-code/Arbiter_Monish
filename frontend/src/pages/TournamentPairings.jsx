@@ -52,7 +52,7 @@ export default function TournamentPairings() {
     try {
       const [tData, pData] = await Promise.all([
         getTournamentById(id),
-        getTournamentPairings(id)
+        getTournamentPairings(id),
       ]);
 
       if (!tData) {
@@ -71,7 +71,6 @@ export default function TournamentPairings() {
         initialResults[index] = pairing.result || "";
       });
       setResults(initialResults);
-
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -145,8 +144,8 @@ export default function TournamentPairings() {
   if (!tournament) return null;
 
   const isMainArbiter = tournament.created_by == currentUserId;
-  const isSubArbiter = (tournament.staff || []).some(
-    sa => typeof sa === 'object' ? sa.user_id == currentUserId : sa == currentUserId
+  const isSubArbiter = (tournament.staff || []).some((sa) =>
+    typeof sa === "object" ? sa.user_id == currentUserId : sa == currentUserId,
   );
 
   const canGeneratePairings = currentRound <= tournament.rounds;
@@ -239,7 +238,9 @@ export default function TournamentPairings() {
                     <TableHead className="text-center">vs</TableHead>
                     <TableHead>Black</TableHead>
                     <TableHead>Rating</TableHead>
-                    {isMainArbiter && <TableHead className="w-40">Result</TableHead>}
+                    {isMainArbiter && (
+                      <TableHead className="w-40">Result</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -298,7 +299,12 @@ export default function TournamentPairings() {
                                 <SelectItem value="0-1">
                                   0-1 (Black wins)
                                 </SelectItem>
-                                <SelectItem value="½-½">½-½ (Draw)</SelectItem>
+                                <SelectItem value="1/2-1/2">
+                                  1/2-1/2 (Draw)
+                                </SelectItem>
+                                <SelectItem value="0-0">
+                                  0-0 (Both 0 points)
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           ) : (
@@ -338,7 +344,9 @@ export default function TournamentPairings() {
                     Ready to Generate Round {currentRound}
                   </div>
                   <div className="text-sm text-muted-foreground mb-6">
-                    {isMainArbiter ? "Generate Swiss pairings for this round to get started." : "Waiting for the Main Arbiter to generate pairings."}
+                    {isMainArbiter
+                      ? "Generate Swiss pairings for this round to get started."
+                      : "Waiting for the Main Arbiter to generate pairings."}
                   </div>
                   {isMainArbiter && (
                     <Button

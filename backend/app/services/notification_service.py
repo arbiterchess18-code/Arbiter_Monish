@@ -57,6 +57,7 @@ def notify_match_result(
         "1-0":     ("Won", "Lost"),
         "0-1":     ("Lost", "Won"),
         "1/2-1/2": ("Drew", "Drew"),
+        "0-0":     ("Scored 0 points", "Scored 0 points"),
     }
     white_outcome, black_outcome = result_map.get(result, ("—", "—"))
 
