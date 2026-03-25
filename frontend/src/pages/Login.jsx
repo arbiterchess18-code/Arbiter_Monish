@@ -74,8 +74,8 @@ const Login = () => {
   };
 
   return (
-    <div className="login container grid">
-      <div className="login__container grid">
+    <div className="login">
+      <div className="login__container">
         {/* --- Left Side: Slider --- */}
         <div className="login__swiper">
           <div className="login__swiper-data">
@@ -103,7 +103,7 @@ const Login = () => {
         </div>
 
         {/* --- Right Side: Form --- */}
-        <div className="login__area grid">
+        <div className="login__area">
           <div className="login__data">
             <h1 className="login__title">Welcome Back 👋</h1>
             <p className="login__description">Please enter your details.</p>
@@ -120,7 +120,7 @@ const Login = () => {
           <span className="login__line">or</span>
 
           <form className="login__form" onSubmit={handleSubmit}>
-            <div className="login__content grid">
+            <div className="login__content">
               <div className="login__box">
                 <input
                   name="email"
