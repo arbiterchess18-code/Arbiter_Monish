@@ -79,9 +79,9 @@ async def sync_ratings(db: Session = Depends(get_db)):
     return {"message": f"Successfully synced ratings for {updated_count} users."}
 
 @router.get("/world-top")
-async def get_world_top(source: str = "fide", limit: int = 10):
+async def get_world_top(source: str = "fide", limit: int = 10, category: str = "classical"):
     """Fetch world top players from external APIs."""
-    top_players = await fetch_world_top_players(source=source, limit=limit)
+    top_players = await fetch_world_top_players(source=source, limit=limit, category=category)
     
     formatted_leaderboard = []
     for i, player in enumerate(top_players):

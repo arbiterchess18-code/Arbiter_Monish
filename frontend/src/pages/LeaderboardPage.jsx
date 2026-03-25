@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { LeaderboardTable } from "@/components/LeaderboardTable";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,24 +9,34 @@ import axios from "axios";
 import { toast } from "sonner";
 
 export default function LeaderboardPage() {
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const initialCategory = queryParams.get("category") || "classical";
+
   const [leaderboard, setLeaderboard] = useState([]);
   const [ratingType, setRatingType] = useState("world-fide");
+  const [category, setCategory] = useState(initialCategory);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
+    const newCategory = queryParams.get("category") || "classical";
+    setCategory(newCategory);
+  }, [location.search]);
+
+  useEffect(() => {
     fetchLeaderboard();
-  }, [ratingType]);
+  }, [ratingType, category]);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      let url = `${baseUrl}/leaderboard/?type=${ratingType}`;
+      let url = `${baseUrl}/api/v1/leaderboard/?type=${ratingType}`;
       if (ratingType === "world-fide") {
-        url = `${baseUrl}/leaderboard/world-top/?source=fide`;
+        url = `${baseUrl}/api/v1/leaderboard/world-top/?source=fide&category=${category}`;
       } else if (ratingType === "world-lichess") {
-        url = `${baseUrl}/leaderboard/world-top/?source=lichess`;
+        url = `${baseUrl}/api/v1/leaderboard/world-top/?source=lichess&category=${category}`;
       }
 
       const response = await axios.get(url);
@@ -42,7 +53,7 @@ export default function LeaderboardPage() {
     setSyncing(true);
     try {
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      await axios.post(`${baseUrl}/leaderboard/sync`);
+      await axios.post(`${baseUrl}/api/v1/leaderboard/sync`);
       toast.success("Ratings synced successfully");
       fetchLeaderboard();
     } catch (error) {
@@ -60,12 +71,11 @@ export default function LeaderboardPage() {
         description={ratingType.startsWith("world") ? "FIDE World Rankings" : "Global Player Standings"}
         action={
           <div className="flex gap-2">
-            <Select value={ratingType} onValueChange={setRatingType}>
+            <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="world-fide">World Ranking (FIDE)</SelectItem>
-                <SelectItem value="world-lichess">World Ranking (Lichess)</SelectItem>
-                
+                <SelectItem value="classical">Classical</SelectItem>
+                <SelectItem value="rapid">Rapid</SelectItem>
               </SelectContent>
             </Select>
             <Button
