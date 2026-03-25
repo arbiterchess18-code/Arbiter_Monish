@@ -13,8 +13,6 @@ import "remixicon/fonts/remixicon.css";
 // Online Chess Images
 const i1 =
   "https://images.unsplash.com/photo-1528819622765-d6bcf132f793?q=80&w=2070&auto=format&fit=crop";
-const i2 =
-  "https://images.unsplash.com/photo-1586161393730-681dc2379740?q=80&w=2072&auto=format&fit=crop";
 const i3 =
   "https://images.unsplash.com/photo-1529699211952-734e80c4d42b?q=80&w=2071&auto=format&fit=crop";
 
@@ -27,7 +25,7 @@ const Signup = () => {
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
   const [signupAuthMessage, setSignupAuthMessage] = useState("");
 
-  const restrictedSignupRoles = new Set(["arbiter", "organization"]);
+  const restrictedSignupRoles = new Set(["organization"]);
 
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
   const toggleConfirm = () => setIsConfirmShown(!isConfirmShown);
@@ -143,10 +141,7 @@ const Signup = () => {
         );
 
         // Redirect based on role
-        if (
-          loginData.userData.role === "arbiter" ||
-          loginData.userData.role === "organization"
-        ) {
+        if (loginData.userData.role === "arbiter") {
           navigate("/arbiter-userhome");
         } else {
           navigate("/player-userhome");
@@ -208,7 +203,6 @@ const Signup = () => {
               >
                 <option value="player">Player</option>
                 <option value="arbiter">Arbiter</option>
-                <option value="organization">Organization</option>
               </select>
             </div>
 
@@ -224,13 +218,33 @@ const Signup = () => {
               </p>
             )}
 
-            <button
-              type="button"
-              className="login__button-border"
-              onClick={handleGoogleSignup}
-            >
-              <i className="ri-google-fill"></i> Sign up with Google
-            </button>
+            {otpSessionToken && (
+              <div className="login__box" style={{ marginBottom: "8px" }}>
+                <input
+                  name="signupOtp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="Enter 6-digit OTP"
+                  className="login__input"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  required
+                />
+                <i className="ri-lock-password-line"></i>
+              </div>
+            )}
+
+            {role !== "arbiter" && (
+              <button
+                type="button"
+                className="login__button-border"
+                onClick={handleGoogleSignup}
+              >
+                <i className="ri-google-fill"></i> Sign up with Google
+              </button>
+            )}
           </div>
 
           <span className="login__line">or</span>
@@ -312,7 +326,7 @@ const Signup = () => {
                 ></i>
               </div>
 
-              {/* FIDE ID (Optional) */}
+              {/* FIDE ID */}
               <div
                 className="login__box flex-col items-start gap-1"
                 style={{ display: "flex", flexDirection: "column", gap: "4px" }}
@@ -333,21 +347,23 @@ const Signup = () => {
                       color: "var(--title-color)",
                     }}
                   >
-                    FIDE ID
+                    FIDE ID {role === "arbiter" && <span style={{color: "#dc2626"}}>*</span>}
                   </label>
-                  <span
-                    style={{
-                      fontSize: "0.65rem",
-                      fontWeight: 500,
-                      color: "var(--text-color)",
-                      backgroundColor: "var(--body-color)",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      border: "1px solid var(--text-color-light)",
-                    }}
-                  >
-                    Optional
-                  </span>
+                  {role !== "arbiter" && (
+                    <span
+                      style={{
+                        fontSize: "0.65rem",
+                        fontWeight: 500,
+                        color: "var(--text-color)",
+                        backgroundColor: "var(--body-color)",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        border: "1px solid var(--text-color-light)",
+                      }}
+                    >
+                      Optional
+                    </span>
+                  )}
                 </div>
                 <div style={{ position: "relative", width: "100%" }}>
                   <input
@@ -357,6 +373,7 @@ const Signup = () => {
                     placeholder="e.g., 1503014"
                     className="login__input"
                     style={{ paddingLeft: "2rem" }}
+                    required={role === "arbiter"}
                   />
                   <i
                     className="ri-id-card-line"

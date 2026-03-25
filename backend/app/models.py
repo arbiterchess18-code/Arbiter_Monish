@@ -284,3 +284,13 @@ class Notification(Base):
 
     user = relationship("User", backref="notifications")
     tournament = relationship("Tournament", backref="notifications")
+
+
+class VerifiedArbiter(Base):
+    __tablename__ = "verified_arbiters"
+    id = Column(Integer, primary_key=True, index=True)
+    fide_id = Column(String(50), unique=True, index=True, nullable=False)
+    added_at = Column(TIMESTAMP, server_default=func.now())
+    added_by = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+
+    adder = relationship("User", foreign_keys=[added_by])

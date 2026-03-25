@@ -362,16 +362,14 @@ def _normalize_role(requested_role: str) -> str:
     role = (requested_role or "player").upper()
     if role == "ARBITER":
         return "ARBITER"
-    if role == "ORGANIZATION":
-        return "ORGANIZATION"
     return "PLAYER"
 
 
 def _ensure_signup_role_allowed(role_name: str) -> None:
-    if role_name in {"ARBITER", "ORGANIZATION"}:
+    if role_name == "ORGANIZATION":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized for this signup.",
+            detail="Organization role is disabled.",
         )
 
 
@@ -521,6 +519,11 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
     requested_role = _normalize_role(oauth_state.get("role", "player"))
     if oauth_mode == "signup":
         _ensure_signup_role_allowed(requested_role)
+        if requested_role == "ARBITER":
+            raise HTTPException(
+                status_code=400,
+                detail="Arbiter signup must be done manually with FIDE ID verification."
+            )
 
     state_frontend_url = (oauth_state.get("frontend_url")
                           or "").strip().rstrip("/")
@@ -883,6 +886,18 @@ async def signup(
     db.refresh(new_user)
 
     requested_role = _normalize_role(role or user_in.role or "player")
+    
+    if requested_role == "ARBITER":
+        if not user_in.fide_id:
+            raise HTTPException(status_code=400, detail="FIDE ID is required for arbiters")
+            
+        is_verified = db.query(models.VerifiedArbiter).filter(models.VerifiedArbiter.fide_id == str(user_in.fide_id)).first()
+        if not is_verified:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid FIDE ID. Access restricted to verified arbiters only."
+            )
+
     _ensure_signup_role_allowed(requested_role)
     role_name = requested_role
 

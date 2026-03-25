@@ -64,10 +64,7 @@ const Login = () => {
       window.dispatchEvent(new Event("authChange"));
 
       // Role-based redirection
-      if (
-        data.userData.role === "arbiter" ||
-        data.userData.role === "organization"
-      ) {
+      if (data.userData.role === "arbiter") {
         navigate("/arbiter-userhome");
       } else {
         navigate("/player-userhome");

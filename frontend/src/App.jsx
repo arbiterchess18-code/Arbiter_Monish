@@ -38,6 +38,7 @@ import ArbiterDetailPage from "./pages/ArbiterDetailPage";
 import LandingPage from "./pages/LandingPage";
 import OAuthSuccess from "./pages/OAuthSuccess";
 import NotFound from "./pages/NotFound";
+import AdminDashboard from "./pages/AdminDashboard";
 import { useRole } from "@/lib/role-context";
 import { Navigate } from "react-router-dom";
 
@@ -217,6 +218,11 @@ const App = () => {
                           <Route
                             path="/orbiter/vacancies"
                             element={<ArbiterVacanciesPage />}
+                          />
+                          
+                          <Route 
+                            path="/admin" 
+                            element={<AdminDashboard />} 
                           />
 
                           <Route path="*" element={<NotFound />} />

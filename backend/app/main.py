@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from . import models
 from .core.limiter import limiter
-from .api.v1.endpoints import auth, tournaments, registrations, pairings, notifications, leaderboard
+from .api.v1.endpoints import auth, tournaments, registrations, pairings, notifications, leaderboard, admin
 from .database import engine, Base
 
 # Load .env explicitly here so ALLOWED_ORIGINS is available before middleware setup
@@ -151,6 +151,7 @@ app.include_router(pairings.router, prefix="/tournaments", tags=["Pairings"])
 app.include_router(notifications.router)
 app.include_router(leaderboard.router,
                    prefix="/api/v1/leaderboard", tags=["Leaderboard"])
+app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
 
 @app.get("/health")
