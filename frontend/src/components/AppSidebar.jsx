@@ -94,7 +94,7 @@ export function AppSidebar() {
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg chess-gradient flex items-center justify-center">
             <img
-              src="/favicon.ico"
+              src="/app_logo.ico"
               alt="Chaduranga logo"
               className="h-5 w-5 rounded-sm"
             />
