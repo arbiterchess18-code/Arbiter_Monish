@@ -72,6 +72,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
+frontend_url = (os.getenv("FRONTEND_URL") or "").strip().rstrip("/")
+if frontend_url and frontend_url not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append(frontend_url)
+
 DEFAULT_LOCAL_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:8080",
@@ -89,7 +93,15 @@ DEFAULT_LOCAL_ORIGINS = [
     "http://127.0.0.1:8085",
 ]
 
+DEFAULT_PROD_ORIGINS = [
+    "https://chaduranga-chess.onrender.com",
+]
+
 for origin in DEFAULT_LOCAL_ORIGINS:
+    if origin not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(origin)
+
+for origin in DEFAULT_PROD_ORIGINS:
     if origin not in ALLOWED_ORIGINS:
         ALLOWED_ORIGINS.append(origin)
 
@@ -106,12 +118,14 @@ app.add_middleware(
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
     origin = request.headers.get("origin", "")
-    is_local_origin = origin.startswith(
-        "http://localhost:") or origin.startswith("http://127.0.0.1:")
+    normalized_origin = origin.rstrip("/")
+    is_local_origin = normalized_origin.startswith(
+        "http://localhost:") or normalized_origin.startswith("http://127.0.0.1:")
+    is_allowed_origin = normalized_origin in ALLOWED_ORIGINS or is_local_origin
 
     def apply_cors_headers(response: Response) -> Response:
-        if is_local_origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
+        if is_allowed_origin and normalized_origin:
+            response.headers["Access-Control-Allow-Origin"] = normalized_origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = request.headers.get(
@@ -121,8 +135,8 @@ async def add_cache_control_header(request: Request, call_next):
             response.headers["Vary"] = "Origin"
         return response
 
-    # Force CORS preflight support for local dev origins.
-    if request.method == "OPTIONS" and is_local_origin:
+    # Force CORS preflight support for all configured origins.
+    if request.method == "OPTIONS" and is_allowed_origin:
         response = Response(status_code=204)
         return apply_cors_headers(response)
 
