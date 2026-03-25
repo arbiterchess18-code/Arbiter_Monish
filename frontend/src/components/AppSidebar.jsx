@@ -77,7 +77,9 @@ export function AppSidebar() {
 
   const handleLogout = async () => {
     try {
-      await apiFetch(`${import.meta.env.VITE_API_URL}/logout`, { method: "POST" });
+      await apiFetch(`${import.meta.env.VITE_API_URL}/logout`, {
+        method: "POST",
+      });
     } catch (e) {
       console.error("Logout error:", e);
     }
@@ -91,7 +93,11 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg chess-gradient flex items-center justify-center">
-            <Crown className="h-5 w-5 text-primary-foreground" />
+            <img
+              src="/favicon.ico"
+              alt="Chaduranga logo"
+              className="h-5 w-5 rounded-sm"
+            />
           </div>
           <div>
             <h2 className="font-display font-bold text-base">Chaduranga</h2>

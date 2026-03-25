@@ -9,6 +9,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import ArbiterDashboardPage from "./pages/ArbiterDashboard";
 import PlayerDashboardPage from "./pages/PlayerDashboard";
 import TournamentsPage from "./pages/TournamentsPage";
@@ -86,6 +88,8 @@ const App = () => {
                 {/* Auth Routes - No Layout */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/oauth-success" element={<OAuthSuccess />} />
 
                 {/* Application Routes - With Layout */}

@@ -55,7 +55,7 @@ except Exception as _db_err:
 # Rate limiter — keyed by client IP (defined in core/limiter.py to avoid circular imports)
 
 app = FastAPI(
-    title="Chess Orbiter API",
+    title="Chaduranga API",
     version="1.1.0",
     strict_slashes=False,
     # Hide docs in production — set HIDE_DOCS=true in .env
@@ -154,8 +154,8 @@ app.include_router(leaderboard.router,
 
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy", "service": "Chess Orbiter Modular API"}
+async def health_check():
+    return {"status": "healthy", "service": "Chaduranga Modular API"}
 
 if __name__ == "__main__":
     import uvicorn

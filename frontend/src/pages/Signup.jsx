@@ -26,6 +26,10 @@ const Signup = () => {
   const [isConfirmShown, setIsConfirmShown] = useState(false);
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
   const [signupAuthMessage, setSignupAuthMessage] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSessionToken, setOtpSessionToken] = useState("");
+  const [signupVerificationToken, setSignupVerificationToken] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   const restrictedSignupRoles = new Set(["arbiter", "organization"]);
 
@@ -65,9 +69,87 @@ const Signup = () => {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
 
+    if (!otpSessionToken) {
+      try {
+        const sendOtpResponse = await apiFetch(
+          `${import.meta.env.VITE_API_URL}/auth/signup/send-otp`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: data.email,
+              name: `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+            }),
+          },
+        );
+
+        const otpPayload = await sendOtpResponse.json();
+        if (!sendOtpResponse.ok) {
+          alert(otpPayload.detail || "Unable to send signup OTP");
+          return;
+        }
+
+        setOtpSessionToken(otpPayload.otp_session_token || "");
+        setSignupAuthMessage("OTP sent to your email. Enter OTP to continue.");
+        return;
+      } catch (error) {
+        console.error("Signup OTP send error:", error);
+        alert("Connection error. Is the backend running?");
+        return;
+      }
+    }
+
+    let verifiedToken = signupVerificationToken;
+
+    if (!verifiedToken) {
+      if (!otp || otp.length !== 6) {
+        alert("Please enter the 6-digit OTP sent to your email.");
+        return;
+      }
+
+      setVerifying(true);
+      try {
+        const verifyResponse = await apiFetch(
+          `${import.meta.env.VITE_API_URL}/auth/signup/verify-otp`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              otp_session_token: otpSessionToken,
+              otp,
+            }),
+          },
+        );
+
+        const verifyPayload = await verifyResponse.json();
+        if (!verifyResponse.ok) {
+          alert(verifyPayload.detail || "Invalid OTP");
+          return;
+        }
+
+        verifiedToken = verifyPayload.signup_verification_token || "";
+        setSignupVerificationToken(verifiedToken);
+      } catch (error) {
+        console.error("Signup OTP verify error:", error);
+        alert("Connection error. Is the backend running?");
+        return;
+      } finally {
+        setVerifying(false);
+      }
+    }
+
     if (data.password !== formData.get("confirmPassword")) {
-      // Note: I should ensure the name is set on the confirm password input or handle it via local state
-      // For now, I'll just proceed with the basic fetch
+      alert("Password and confirm password do not match.");
+      return;
+    }
+
+    if (!verifiedToken) {
+      alert("Email verification failed. Please request OTP again.");
+      return;
     }
 
     try {
@@ -85,7 +167,9 @@ const Signup = () => {
       }
 
       const response = await apiFetch(
-        `${import.meta.env.VITE_API_URL}/signup?role=${role}`,
+        `${import.meta.env.VITE_API_URL}/signup?role=${role}&signup_verification_token=${encodeURIComponent(
+          verifiedToken,
+        )}`,
         {
           method: "POST",
           headers: {
@@ -202,6 +286,24 @@ const Signup = () => {
               >
                 {signupAuthMessage}
               </p>
+            )}
+
+            {otpSessionToken && (
+              <div className="login__box" style={{ marginBottom: "8px" }}>
+                <input
+                  name="signupOtp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="Enter 6-digit OTP"
+                  className="login__input"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  required
+                />
+                <i className="ri-lock-password-line"></i>
+              </div>
             )}
 
             <button
@@ -363,8 +465,16 @@ const Signup = () => {
             </div>
 
             <button type="submit" className="login__button">
-              Sign Up
+              {!otpSessionToken
+                ? "Send OTP"
+                : verifying
+                  ? "Verifying..."
+                  : "Verify OTP & Sign Up"}
             </button>
+
+            <Link to="/forgot-password" className="login__forgot">
+              Forgot Password?
+            </Link>
           </form>
 
           <p className="login__switch">

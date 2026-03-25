@@ -22,7 +22,9 @@ const ArbitersPage = () => {
   const fetchArbiters = async () => {
     try {
       setLoading(true);
-      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/arbiters`);
+      const response = await apiFetch(
+        `${import.meta.env.VITE_API_URL}/users/arbiters`,
+      );
       if (!response.ok) throw new Error("Network response was not ok");
       const data = await response.json();
       setArbiters(data);
