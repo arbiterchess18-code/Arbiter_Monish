@@ -8,7 +8,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from typing import Optional
 import httpx
@@ -374,8 +374,6 @@ def _ensure_signup_role_allowed(role_name: str) -> None:
 
 
 def _ensure_role_assignment(db: Session, user: models.User, role_name: str) -> None:
-    from sqlalchemy import func
-
     target_role = db.query(models.Role).filter(
         func.upper(models.Role.role_name) == role_name
     ).first()
@@ -411,15 +409,36 @@ def _build_unique_username(db: Session, email: str) -> str:
     return candidate
 
 
+def _extract_google_names(userinfo: dict) -> tuple[Optional[str], Optional[str]]:
+    first_name = (userinfo.get("given_name") or "").strip()
+    last_name = (userinfo.get("family_name") or "").strip()
+
+    # Fallback for providers that only return the full display name.
+    if not first_name and not last_name:
+        full_name = (userinfo.get("name") or "").strip()
+        if full_name:
+            parts = [p for p in full_name.split(" ") if p]
+            if parts:
+                first_name = parts[0]
+                last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
+
+    return (first_name or None, last_name or None)
+
+
 @router.post("/token")
 @limiter.limit("5/minute")
 def login(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    login_identifier = (form_data.username or "").strip()
     user = db.query(models.User).filter(
-        models.User.username == form_data.username).first()
+        or_(
+            models.User.username == login_identifier,
+            func.lower(models.User.email) == login_identifier.lower(),
+        )
+    ).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email/username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -571,8 +590,11 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
         raise HTTPException(
             status_code=400, detail="Google account email is not verified")
 
+    first_name, last_name = _extract_google_names(userinfo)
+    picture_url = (userinfo.get("picture") or None)
+
     existing_user = db.query(models.User).filter(
-        models.User.email == email).first()
+        func.lower(models.User.email) == email).first()
     user_created = False
 
     if not existing_user:
@@ -580,9 +602,9 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
             username=_build_unique_username(db, email),
             email=email,
             hashed_password=get_password_hash(secrets.token_urlsafe(32)),
-            first_name=(userinfo.get("given_name") or "").strip() or None,
-            last_name=(userinfo.get("family_name") or "").strip() or None,
-            profile_picture_url=(userinfo.get("picture") or None),
+            first_name=first_name,
+            last_name=last_name,
+            profile_picture_url=picture_url,
             is_active=True,
         )
         db.add(existing_user)
@@ -591,21 +613,32 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
         user_created = True
     else:
         updated = False
-        if userinfo.get("picture") and existing_user.profile_picture_url != userinfo.get("picture"):
-            existing_user.profile_picture_url = userinfo.get("picture")
+        if picture_url and existing_user.profile_picture_url != picture_url:
+            existing_user.profile_picture_url = picture_url
             updated = True
-        if not existing_user.first_name and userinfo.get("given_name"):
-            existing_user.first_name = userinfo.get("given_name")
+        if first_name and existing_user.first_name != first_name:
+            existing_user.first_name = first_name
             updated = True
-        if not existing_user.last_name and userinfo.get("family_name"):
-            existing_user.last_name = userinfo.get("family_name")
+        if last_name and existing_user.last_name != last_name:
+            existing_user.last_name = last_name
+            updated = True
+        if not existing_user.is_active:
+            existing_user.is_active = True
             updated = True
         if updated:
             db.add(existing_user)
             db.commit()
 
-    if user_created or oauth_mode == "signup":
+    if user_created:
+        default_role = requested_role if oauth_mode == "signup" else "PLAYER"
+        _ensure_role_assignment(db, existing_user, default_role)
+    elif oauth_mode == "signup":
         _ensure_role_assignment(db, existing_user, requested_role)
+
+    # Keep legacy Google users usable if their role mapping was never created.
+    if not existing_user.user_roles:
+        _ensure_role_assignment(db, existing_user, "PLAYER")
+        db.refresh(existing_user)
 
     auth_payload = _create_auth_payload(existing_user)
     encoded_user_data = quote(

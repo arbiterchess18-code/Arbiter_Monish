@@ -21,11 +21,11 @@ import "./Login.css";
 const Login = () => {
   const navigate = useNavigate();
   const [isPasswordShown, setIsPasswordShown] = useState(false);
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const togglePassword = () => setIsPasswordShown(!isPasswordShown);
 
   const handleGoogleLogin = () => {
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
     window.location.href = `${apiUrl}/auth/google/login?mode=login`;
   };
 
@@ -41,7 +41,7 @@ const Login = () => {
       body.append("username", email); // Using email as username for now as per form
       body.append("password", password);
 
-      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/token`, {
+      const response = await apiFetch(`${apiUrl}/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

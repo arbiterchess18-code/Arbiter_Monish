@@ -22,6 +22,7 @@ const Signup = () => {
   const navigate = useNavigate();
   const [isPasswordShown, setIsPasswordShown] = useState(false);
   const [isConfirmShown, setIsConfirmShown] = useState(false);
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
   const [signupAuthMessage, setSignupAuthMessage] = useState("");
   const [otp, setOtp] = useState("");
@@ -66,7 +67,6 @@ const Signup = () => {
       return;
     }
 
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
     const params = new URLSearchParams({ mode: "signup", role });
     window.location.href = `${apiUrl}/auth/google/login?${params.toString()}`;
   };
@@ -101,16 +101,13 @@ const Signup = () => {
         payload.fide_id = data.fideId.trim();
       }
 
-      const response = await apiFetch(
-        `${import.meta.env.VITE_API_URL}/signup?role=${role}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      const response = await apiFetch(`${apiUrl}/signup?role=${role}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -123,16 +120,13 @@ const Signup = () => {
       loginBody.append("username", data.email);
       loginBody.append("password", data.password);
 
-      const loginResponse = await apiFetch(
-        `${import.meta.env.VITE_API_URL}/token`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: loginBody,
+      const loginResponse = await apiFetch(`${apiUrl}/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-      );
+        body: loginBody,
+      });
 
       if (loginResponse.ok) {
         const loginData = await loginResponse.json();
@@ -348,7 +342,10 @@ const Signup = () => {
                       color: "var(--title-color)",
                     }}
                   >
-                    FIDE ID {role === "arbiter" && <span style={{color: "#dc2626"}}>*</span>}
+                    FIDE ID{" "}
+                    {role === "arbiter" && (
+                      <span style={{ color: "#dc2626" }}>*</span>
+                    )}
                   </label>
                   {role !== "arbiter" && (
                     <span
