@@ -130,6 +130,7 @@ export default function ProfilePage() {
             country: data.country || "India",
             profile_picture_url: data.profile_picture_url || null,
             updated_at: data.updated_at,
+            playing_preferences: data.playing_preferences || ["Classical", "Rapid", "Blitz"],
           };
           setProfile(mapped);
           setDraftProfile(mapped);
@@ -423,7 +424,7 @@ export default function ProfilePage() {
 
                     {/* Playing preferences as pills */}
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {profile.playing_preferences.map((p) => (
+                      {profile.playing_preferences?.map((p) => (
                         <span key={p} className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                           {p}
                         </span>
@@ -553,7 +554,7 @@ export default function ProfilePage() {
               <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} className="stat-card py-3">
                 <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Format Preferences</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {profile.playing_preferences.map((p) => (
+                  {profile.playing_preferences?.map((p) => (
                     <span key={p} className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                       {p}
                     </span>
