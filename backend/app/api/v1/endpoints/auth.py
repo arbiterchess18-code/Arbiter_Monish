@@ -865,21 +865,21 @@ async def signup(
     )
 
     if user_in.fide_id:
+        if db.query(models.User).filter(models.User.fide_id == str(user_in.fide_id)).first():
+            raise HTTPException(status_code=400, detail="FIDE ID already claimed")
+            
+        new_user.fide_id = str(user_in.fide_id).strip()
         try:
-            if db.query(models.User).filter(models.User.fide_id == user_in.fide_id).first():
-                raise HTTPException(
-                    status_code=400, detail="FIDE ID already claimed")
-
-            fide_data = await fetch_fide_player_info(user_in.fide_id)
-            new_user.fide_id = str(fide_data.get("fide_id"))
-            new_user.fide_rating = fide_data.get("classical_rating")
-            new_user.rapid_rating = fide_data.get("rapid_rating")
-            new_user.blitz_rating = fide_data.get("blitz_rating")
-            new_user.title = fide_data.get("fide_title")
-            new_user.country = fide_data.get("federation")
-        except HTTPException as e:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid FIDE ID: {e.detail}")
+            fide_data = await fetch_fide_player_info(new_user.fide_id)
+            if fide_data:
+                new_user.fide_rating = fide_data.get("classical_rating")
+                new_user.rapid_rating = fide_data.get("rapid_rating")
+                new_user.blitz_rating = fide_data.get("blitz_rating")
+                new_user.title = fide_data.get("fide_title")
+                new_user.country = fide_data.get("federation")
+        except Exception:
+            # Do NOT block if fetch fails. FIDE fetch is an enhancement.
+            pass
 
     db.add(new_user)
     db.commit()
