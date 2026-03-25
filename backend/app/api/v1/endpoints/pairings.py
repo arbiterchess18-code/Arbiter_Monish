@@ -142,13 +142,17 @@ def submit_match_result(
 
     # Fire result notifications for both players (skip BYE — black is None)
     if match.black_player_id and new_result in ("1-0", "0-1", "1/2-1/2", "0-0"):
-        notification_service.notify_match_result(
-            db,
-            match=match,
-            tournament=tournament,
-            result=new_result,
-        )
-        db.commit()
+        try:
+            notification_service.notify_match_result(
+                db,
+                match=match,
+                tournament=tournament,
+                result=new_result,
+            )
+            db.commit()
+        except Exception as e:
+            # Non-critical: don't let notification failure block the result save
+            print(f"⚠️ Notification failed (non-critical): {e}")
 
     return {"message": "Result updated successfully", "white_points": float(white_reg.current_points if white_reg else 0)}
 
