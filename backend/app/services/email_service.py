@@ -11,6 +11,43 @@ load_dotenv()
 resend.api_key = os.getenv("RESEND_API_KEY")
 
 
+def send_login_alert_email(
+    email: str,
+    name: str = "Player",
+    ip_address: str = "Unknown",
+    user_agent: str = "Unknown",
+):
+    if not resend.api_key:
+        print("RESEND_API_KEY is not configured; login alert email not sent")
+        return
+
+    from_email = os.getenv("LOGIN_ALERT_FROM_EMAIL", "onboarding@resend.dev")
+    subject = "New login to your Chess Arena account"
+    html_content = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2563eb;">New Login Detected</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>Your account was just used to sign in.</p>
+        <p><strong>IP Address:</strong> {ip_address}</p>
+        <p><strong>Device:</strong> {user_agent}</p>
+        <p>If this was you, no action is needed.</p>
+        <p>If this was not you, please reset your password immediately.</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send(
+            {
+                "from": from_email,
+                "to": email,
+                "subject": subject,
+                "html": html_content,
+            }
+        )
+    except Exception as exc:
+        print(f"Failed to send login alert email to {email}: {exc}")
+
+
 def send_onesignal_signup_email(email: str, name: str = "Player"):
     app_id = os.getenv("ONESIGNAL_APP_ID")
     rest_api_key = os.getenv("ONESIGNAL_REST_API_KEY")

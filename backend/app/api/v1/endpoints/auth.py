@@ -425,6 +425,18 @@ def login(request: Request, response: Response, form_data: OAuth2PasswordRequest
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    try:
+        client_ip = request.client.host if request.client else "Unknown"
+        user_agent = request.headers.get("user-agent", "Unknown")
+        email_service.send_login_alert_email(
+            email=user.email,
+            name=(user.first_name or user.username or "Player"),
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    except Exception as exc:
+        print(f"Login alert notification failed for {user.username}: {exc}")
+
     auth_payload = _create_auth_payload(user)
 
     json_response = JSONResponse(content={
