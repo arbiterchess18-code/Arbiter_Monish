@@ -95,8 +95,8 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [profile, setProfile] = useState(mockProfile);
-  const [draftProfile, setDraftProfile] = useState(mockProfile);
+  const [profile, setProfile] = useState(null);
+  const [draftProfile, setDraftProfile] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [notifPrefs, setNotifPrefs] = useState(() => {
     try {
@@ -117,7 +117,6 @@ export default function ProfilePage() {
         const data = await getUserProfile();
         if (data) {
           const mapped = {
-            ...mockProfile,
             name: data.name || `${data.first_name} ${data.last_name}`.trim(),
             first_name: data.first_name || "",
             last_name: data.last_name || "",
@@ -151,6 +150,10 @@ export default function ProfilePage() {
     };
     loadProfile();
   }, []);
+
+  if (!profile) {
+    return <div className="flex justify-center items-center h-64 text-muted-foreground">Loading profile...</div>;
+  }
 
   const isArbiter = ARBITER_TITLES.includes(profile.chess_title);
 
