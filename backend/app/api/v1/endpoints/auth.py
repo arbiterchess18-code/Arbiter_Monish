@@ -866,8 +866,9 @@ async def signup(
 
     if user_in.fide_id:
         if db.query(models.User).filter(models.User.fide_id == str(user_in.fide_id)).first():
-            raise HTTPException(status_code=400, detail="FIDE ID already claimed")
-            
+            raise HTTPException(
+                status_code=400, detail="FIDE ID already claimed")
+
         new_user.fide_id = str(user_in.fide_id).strip()
         try:
             fide_data = await fetch_fide_player_info(new_user.fide_id)
@@ -886,12 +887,14 @@ async def signup(
     db.refresh(new_user)
 
     requested_role = _normalize_role(role or user_in.role or "player")
-    
+
     if requested_role == "ARBITER":
         if not user_in.fide_id:
-            raise HTTPException(status_code=400, detail="FIDE ID is required for arbiters")
-            
-        is_verified = db.query(models.VerifiedArbiter).filter(models.VerifiedArbiter.fide_id == str(user_in.fide_id)).first()
+            raise HTTPException(
+                status_code=400, detail="FIDE ID is required for arbiters")
+
+        is_verified = db.query(models.VerifiedArbiter).filter(
+            models.VerifiedArbiter.fide_id == str(user_in.fide_id)).first()
         if not is_verified:
             raise HTTPException(
                 status_code=400,
@@ -901,7 +904,6 @@ async def signup(
     _ensure_signup_role_allowed(requested_role)
     role_name = requested_role
 
-    from sqlalchemy import func
     target_role = db.query(models.Role).filter(
         func.upper(models.Role.role_name) == role_name).first()
     if not target_role:
