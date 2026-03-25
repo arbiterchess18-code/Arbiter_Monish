@@ -597,7 +597,7 @@ export default function TournamentViewDetails() {
           className="grid w-full"
           style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
         >
-          {tabs.map((tab) => (
+          {tabs?.map((tab) => (
             <TabsTrigger key={tab} value={tab} className="capitalize">
               {tab}
             </TabsTrigger>
@@ -642,7 +642,7 @@ export default function TournamentViewDetails() {
                   </Button>
                 ) : null}
                 <div className="text-xs text-muted-foreground">
-                  Tie-breakers: {(viewData?.tie_breaker_rules || []).join(", ")}
+                  Tie-breakers: {(viewData?.tie_breaker_rules || [])?.join(", ")}
                 </div>
               </div>
             </CardContent>
@@ -755,7 +755,7 @@ export default function TournamentViewDetails() {
                     No registrations found.
                   </p>
                 ) : (
-                  filteredRegistrations.map((registration) => (
+                  filteredRegistrations?.map((registration) => (
                     <div
                       key={registration.registration_id}
                       className="border rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap"
@@ -877,7 +877,7 @@ export default function TournamentViewDetails() {
                   tournament.pairing_system ||
                   "Swiss"}{" "}
                 | Tie-breakers:{" "}
-                {(pairingsData?.tie_breaker_rules || []).join(", ")}
+                {(pairingsData?.tie_breaker_rules || [])?.join(", ")}
               </div>
 
               {canManage ? (

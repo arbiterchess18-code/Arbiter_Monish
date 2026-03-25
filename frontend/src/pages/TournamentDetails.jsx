@@ -438,7 +438,7 @@ export default function TournamentDetails() {
   // actualCurrentRound: most authoritative source is roundsInfo max; fall back to tournament field
   const actualCurrentRound =
     roundsInfo.length > 0
-      ? Math.max(...roundsInfo.map((r) => r.round_number))
+      ? Math.max(...roundsInfo?.map((r) => r.round_number))
       : tournament.current_round || tournament.currentRound || 0;
 
   const isFinalRound =
@@ -491,7 +491,7 @@ export default function TournamentDetails() {
   );
 
   const availableRounds = Array.from(
-    new Set(pairings.map((pairing) => pairing.round_number).filter(Boolean)),
+    new Set(pairings?.map((pairing) => pairing.round_number).filter(Boolean)),
   ).sort((left, right) => left - right);
 
   const latestRoundWithPairings =
@@ -584,7 +584,7 @@ export default function TournamentDetails() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {matches.map((match) => {
+              {matches?.map((match) => {
                 const myOutcome = getMyPairingOutcome(match);
                 return (
                   <TableRow
@@ -1157,7 +1157,7 @@ export default function TournamentDetails() {
                           <SelectValue placeholder="Select Round" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableRounds.map((roundNumber) => (
+                          {availableRounds?.map((roundNumber) => (
                             <SelectItem
                               key={roundNumber}
                               value={roundNumber.toString()}
@@ -1218,7 +1218,7 @@ export default function TournamentDetails() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPairings.map((match) => (
+                    {filteredPairings?.map((match) => (
                       <TableRow key={match.match_id} className="h-12">
                         <TableCell className="text-center font-bold text-muted-foreground border-r">
                           {match.board_number}
@@ -1433,7 +1433,7 @@ export default function TournamentDetails() {
                         <TableHead className="text-center w-12 border-r border-[#ccc] font-bold">
                           Pts.
                         </TableHead>
-                        {tieBreakNames.map((name, i) => (
+                        {tieBreakNames?.map((name, i) => (
                           <TableHead
                             key={i}
                             className={`text-center w-16 border-r border-[#ccc] ${i === tieBreakNames.length - 1 ? "border-r-0" : ""}`}
@@ -1467,7 +1467,7 @@ export default function TournamentDetails() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sortedStandings.map((player, index) => (
+                      {sortedStandings?.map((player, index) => (
                         <TableRow
                           key={player.user_id || index}
                           className={`h-8 border-b border-[#eee] transition-colors ${index % 2 === 0 ? "bg-white" : "bg-[#f9f9f9]"} hover:bg-[#eef2ff]`}
@@ -1531,8 +1531,7 @@ export default function TournamentDetails() {
                 <div className="mt-4 text-[10px] text-muted-foreground italic flex justify-between items-center">
                   <span>
                     Annotation:{" "}
-                    {tieBreakNames
-                      .map((name, i) => `Tie Break${i + 1}: ${name}`)
+                    {tieBreakNames?.map((name, i) => `Tie Break${i + 1}: ${name}`)
                       .join(", ")}
                   </span>
                 </div>
