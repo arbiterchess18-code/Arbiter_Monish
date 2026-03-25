@@ -131,16 +131,20 @@ def submit_match_result(
                 black_reg.current_points or 0) - get_points(old_result, "black")
 
     # Apply new points
+    new_white_pts = 0.0
     if white_reg:
         white_reg.current_points = float(
             white_reg.current_points or 0) + get_points(new_result, "white")
+        new_white_pts = float(white_reg.current_points)
+    
     if black_reg:
         black_reg.current_points = float(
             black_reg.current_points or 0) + get_points(new_result, "black")
 
+    # Final commit for match and points
     db.commit()
 
-    # Fire result notifications for both players (skip BYE — black is None)
+    # Fire result notifications for both players (non-blocking, non-critical)
     if match.black_player_id and new_result in ("1-0", "0-1", "1/2-1/2", "0-0"):
         try:
             notification_service.notify_match_result(
@@ -151,10 +155,10 @@ def submit_match_result(
             )
             db.commit()
         except Exception as e:
-            # Non-critical: don't let notification failure block the result save
-            print(f"⚠️ Notification failed (non-critical): {e}")
+            print(f"Notification Error: {str(e)}")
+            db.rollback() # Ensure session is clean
 
-    return {"message": "Result updated successfully", "white_points": float(white_reg.current_points if white_reg else 0)}
+    return {"message": "Result updated successfully", "white_points": new_white_pts}
 
 
 @router.get("/{tournament_id}/pairings", response_model=PairingResponse)
