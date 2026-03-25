@@ -51,22 +51,29 @@ async def get_my_profile(
                 fide_data = await fetch_fide_player_info(current_user.fide_id)
                 if fide_data:
                     if not current_user.fide_rating or current_user.fide_rating == 0:
-                        current_user.fide_rating = fide_data.get("classical_rating", 0)
+                        current_user.fide_rating = fide_data.get(
+                            "classical_rating", 0)
                     if not current_user.rapid_rating or current_user.rapid_rating == 0:
-                        current_user.rapid_rating = fide_data.get("rapid_rating", 0)
+                        current_user.rapid_rating = fide_data.get(
+                            "rapid_rating", 0)
                     if not current_user.blitz_rating or current_user.blitz_rating == 0:
-                        current_user.blitz_rating = fide_data.get("blitz_rating", 0)
+                        current_user.blitz_rating = fide_data.get(
+                            "blitz_rating", 0)
                     if not current_user.title:
                         current_user.title = fide_data.get("fide_title")
                     if not current_user.country or current_user.country == "India":
-                        current_user.country = fide_data.get("federation") or current_user.country
+                        current_user.country = fide_data.get(
+                            "federation") or current_user.country
                     if fide_data.get("national_rank_all"):
-                        current_user.national_rank = fide_data.get("national_rank_all")
+                        current_user.national_rank = fide_data.get(
+                            "national_rank_all")
                     # Also try to populate name if missing
                     if not current_user.first_name and fide_data.get("name"):
-                        name_parts = fide_data.get("name").strip().split(" ", 1)
+                        name_parts = fide_data.get(
+                            "name").strip().split(" ", 1)
                         current_user.first_name = name_parts[0]
-                        current_user.last_name = name_parts[1] if len(name_parts) > 1 else ""
+                        current_user.last_name = name_parts[1] if len(
+                            name_parts) > 1 else ""
 
                     db.commit()
                     db.refresh(current_user)
@@ -130,13 +137,21 @@ def get_my_player_stats(
         models.Match.result == "1/2-1/2",
     ).scalar() or 0
 
+    zero_zero_results = db.query(func.count(models.Match.match_id)).filter(
+        or_(
+            models.Match.white_player_id == current_user.user_id,
+            models.Match.black_player_id == current_user.user_id,
+        ),
+        models.Match.result == "0-0",
+    ).scalar() or 0
+
     tournaments = db.query(func.count(func.distinct(models.TournamentRegistration.tournament_id))).filter(
         models.TournamentRegistration.user_id == current_user.user_id,
         models.TournamentRegistration.status.in_(
             ["pending", "approved", "active"]),
     ).scalar() or 0
 
-    losses = max(total_matches - wins - draws, 0)
+    losses = max(total_matches - wins - draws - zero_zero_results, 0)
     win_rate = round((wins / total_matches) * 100) if total_matches else 0
     current_rating = current_user.fide_rating or current_user.national_rating or 0
 
@@ -178,21 +193,26 @@ async def update_my_profile(
             try:
                 fide_data = await fetch_fide_player_info(new_fide_id)
                 if fide_data:
-                    current_user.fide_rating = fide_data.get("classical_rating") or current_user.fide_rating
-                    current_user.rapid_rating = fide_data.get("rapid_rating") or current_user.rapid_rating
-                    current_user.blitz_rating = fide_data.get("blitz_rating") or current_user.blitz_rating
+                    current_user.fide_rating = fide_data.get(
+                        "classical_rating") or current_user.fide_rating
+                    current_user.rapid_rating = fide_data.get(
+                        "rapid_rating") or current_user.rapid_rating
+                    current_user.blitz_rating = fide_data.get(
+                        "blitz_rating") or current_user.blitz_rating
                     if fide_data.get("fide_title"):
                         current_user.title = fide_data.get("fide_title")
                     if fide_data.get("federation"):
                         current_user.country = fide_data.get("federation")
                     if fide_data.get("national_rank_all"):
-                        current_user.national_rank = fide_data.get("national_rank_all")
+                        current_user.national_rank = fide_data.get(
+                            "national_rank_all")
                     # Parse full name into first/last name
                     fide_name = fide_data.get("name", "").strip()
                     if fide_name:
                         name_parts = fide_name.split(" ", 1)
                         current_user.first_name = name_parts[0]
-                        current_user.last_name = name_parts[1] if len(name_parts) > 1 else ""
+                        current_user.last_name = name_parts[1] if len(
+                            name_parts) > 1 else ""
             except Exception:
                 pass  # Don't fail the save if FIDE API is down
 
@@ -235,7 +255,6 @@ async def update_my_profile(
         "profile_picture_url": current_user.profile_picture_url,
         "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
     }
-
 
 
 @router.get("/me/achievements")

@@ -67,8 +67,8 @@ export default function TournamentPairings() {
 
       // Initialize results state
       const initialResults = {};
-      (pData?.pairings || []).forEach((pairing, index) => {
-        initialResults[index] = pairing.result || "";
+      (pData?.pairings || []).forEach((pairing) => {
+        initialResults[pairing.match_id] = pairing.result || "";
       });
       setResults(initialResults);
     } catch (error) {
@@ -91,14 +91,14 @@ export default function TournamentPairings() {
     }
   };
 
-  const handleResultChange = (index, result) => {
-    setResults((prev) => ({ ...prev, [index]: result }));
+  const handleResultChange = (matchId, result) => {
+    setResults((prev) => ({ ...prev, [matchId]: result }));
   };
 
   const handleSubmitResults = async () => {
     try {
       // Validate all results are entered
-      const allEntered = pairings.every((_, index) => results[index]);
+      const allEntered = pairings.every((pairing) => results[pairing.match_id]);
 
       if (!allEntered) {
         toast.error("Please enter all results before submitting");
@@ -106,13 +106,12 @@ export default function TournamentPairings() {
       }
 
       // Format results for submission
-      const formattedResults = pairings.map((pairing, index) => ({
-        whiteId: pairing.white.id,
-        blackId: pairing.black?.id || null,
-        result: results[index],
+      const formattedResults = pairings.map((pairing) => ({
+        match_id: pairing.match_id,
+        result: results[pairing.match_id],
       }));
 
-      await submitRoundResults(id, currentRound, formattedResults);
+      await submitRoundResults(id, formattedResults);
 
       toast.success(`Round ${currentRound} results submitted!`);
 
@@ -244,32 +243,34 @@ export default function TournamentPairings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pairings.map((pairing, index) => (
-                    <TableRow key={index}>
+                  {pairings.map((pairing) => (
+                    <TableRow key={pairing.match_id}>
                       <TableCell className="font-medium">
-                        {pairing.board}
+                        {pairing.board_number}
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{pairing.white.name}</div>
-                        {pairing.white.title && (
+                        <div className="font-medium">
+                          {pairing.white_player_name}
+                        </div>
+                        {pairing.white_title && (
                           <Badge variant="outline" className="text-xs mt-1">
-                            {pairing.white.title}
+                            {pairing.white_title}
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>{pairing.white.rating || "-"}</TableCell>
+                      <TableCell>{pairing.white_rating || "-"}</TableCell>
                       <TableCell className="text-center text-muted-foreground">
                         vs
                       </TableCell>
                       <TableCell>
-                        {pairing.black ? (
+                        {pairing.black_player_id ? (
                           <>
                             <div className="font-medium">
-                              {pairing.black.name}
+                              {pairing.black_player_name}
                             </div>
-                            {pairing.black.title && (
+                            {pairing.black_title && (
                               <Badge variant="outline" className="text-xs mt-1">
-                                {pairing.black.title}
+                                {pairing.black_title}
                               </Badge>
                             )}
                           </>
@@ -279,14 +280,14 @@ export default function TournamentPairings() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>{pairing.black?.rating || "-"}</TableCell>
+                      <TableCell>{pairing.black_rating || "-"}</TableCell>
                       {isMainArbiter && (
                         <TableCell>
-                          {pairing.black ? (
+                          {pairing.black_player_id ? (
                             <Select
-                              value={results[index] || ""}
+                              value={results[pairing.match_id] || ""}
                               onValueChange={(value) =>
-                                handleResultChange(index, value)
+                                handleResultChange(pairing.match_id, value)
                               }
                             >
                               <SelectTrigger>
