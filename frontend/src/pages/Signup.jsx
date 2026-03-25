@@ -24,6 +24,10 @@ const Signup = () => {
   const [isConfirmShown, setIsConfirmShown] = useState(false);
   const [role, setRole] = useState("player"); // "player", "arbiter", or "organization"
   const [signupAuthMessage, setSignupAuthMessage] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSessionToken, setOtpSessionToken] = useState("");
+  const [signupVerificationToken, setSignupVerificationToken] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   const restrictedSignupRoles = new Set(["organization"]);
 
