@@ -19,7 +19,7 @@ export function LeaderboardTable({ entries }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {entries.map((entry, i) => (
+          {entries?.map((entry, i) => (
             <TableRow key={entry.player.id} className="group hover:bg-muted/50 transition-colors">
               <TableCell>{rankBadge(entry.rank)}</TableCell>
               <TableCell>

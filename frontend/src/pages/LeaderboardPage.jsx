@@ -20,11 +20,12 @@ export default function LeaderboardPage() {
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
-      let url = `http://localhost:8000/api/v1/leaderboard/?type=${ratingType}`;
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      let url = `${baseUrl}/leaderboard/?type=${ratingType}`;
       if (ratingType === "world-fide") {
-        url = "http://localhost:8000/api/v1/leaderboard/world-top/?source=fide";
+        url = `${baseUrl}/leaderboard/world-top/?source=fide`;
       } else if (ratingType === "world-lichess") {
-        url = "http://localhost:8000/api/v1/leaderboard/world-top/?source=lichess";
+        url = `${baseUrl}/leaderboard/world-top/?source=lichess`;
       }
 
       const response = await axios.get(url);
@@ -40,7 +41,8 @@ export default function LeaderboardPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await axios.post("http://localhost:8000/api/v1/leaderboard/sync");
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      await axios.post(`${baseUrl}/leaderboard/sync`);
       toast.success("Ratings synced successfully");
       fetchLeaderboard();
     } catch (error) {
