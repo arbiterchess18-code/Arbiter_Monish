@@ -29,6 +29,36 @@ const Signup = () => {
   const [otpSessionToken, setOtpSessionToken] = useState("");
   const [signupVerificationToken, setSignupVerificationToken] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [fideId, setFideId] = useState("");
+  const [isFetchingFide, setIsFetchingFide] = useState(false);
+  const [fideStatus, setFideStatus] = useState("");
+
+  const fetchFideInfo = async (id) => {
+    if (!id || id.trim() === "") {
+      setFideStatus("");
+      return;
+    }
+    setIsFetchingFide(true);
+    setFideStatus("Fetching FIDE info...");
+    try {
+      const response = await apiFetch(`${apiUrl}/auth/fide-info/${id.trim()}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.first_name) setFirstName(data.first_name);
+        if (data.last_name) setLastName(data.last_name);
+        setFideStatus(`FIDE profile synced: ${data.first_name} ${data.last_name} (${data.title || "No Title"})`);
+      } else {
+        setFideStatus("FIDE ID not found");
+      }
+    } catch (error) {
+      console.error("FIDE fetch error:", error);
+      setFideStatus("Failed to fetch FIDE info");
+    } finally {
+      setIsFetchingFide(false);
+    }
+  };
 
   const restrictedSignupRoles = new Set(["organization"]);
 
@@ -253,6 +283,8 @@ const Signup = () => {
                   type="text"
                   placeholder="First Name"
                   className="login__input"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   required
                 />
                 <i className="ri-user-line"></i>
@@ -265,6 +297,8 @@ const Signup = () => {
                   type="text"
                   placeholder="Last Name"
                   className="login__input"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   required
                 />
                 <i className="ri-user-line"></i>
@@ -371,6 +405,9 @@ const Signup = () => {
                     placeholder="e.g., 1503014"
                     className="login__input"
                     style={{ paddingLeft: "2rem" }}
+                    value={fideId}
+                    onChange={(e) => setFideId(e.target.value)}
+                    onBlur={(e) => fetchFideInfo(e.target.value)}
                     required={role === "arbiter"}
                   />
                   <i
@@ -384,6 +421,19 @@ const Signup = () => {
                     }}
                   ></i>
                 </div>
+                {fideStatus && (
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      color: fideStatus.includes("synced") ? "#16a34a" : "#ca8a04",
+                      marginTop: "2px",
+                      textAlign: "left",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {fideStatus}
+                  </p>
+                )}
                 <p
                   style={{
                     fontSize: "0.75rem",

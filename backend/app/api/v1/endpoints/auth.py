@@ -429,12 +429,17 @@ def _extract_google_names(userinfo: dict) -> tuple[Optional[str], Optional[str]]
 @limiter.limit("5/minute")
 def login(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     login_identifier = (form_data.username or "").strip()
+    print(f"[DEBUG LOGIN] Identifier: {login_identifier}")
     user = db.query(models.User).filter(
         or_(
             models.User.username == login_identifier,
             func.lower(models.User.email) == login_identifier.lower(),
         )
     ).first()
+    print(f"[DEBUG LOGIN] User found: {user.username if user else 'None'}")
+    if user:
+        is_pw_valid = verify_password(form_data.password, user.hashed_password)
+        print(f"[DEBUG LOGIN] Password valid: {is_pw_valid}")
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -911,6 +916,18 @@ async def signup(
                 new_user.blitz_rating = fide_data.get("blitz_rating")
                 new_user.title = fide_data.get("fide_title")
                 new_user.country = fide_data.get("federation")
+                
+                fide_name = fide_data.get("name")
+                if fide_name:
+                    fide_name = fide_name.strip()
+                    if "," in fide_name:
+                        l_name, f_name = fide_name.split(",", 1)
+                        new_user.first_name = f_name.strip()
+                        new_user.last_name = l_name.strip()
+                    else:
+                        parts = fide_name.split(" ", 1)
+                        new_user.first_name = parts[0].strip()
+                        new_user.last_name = parts[1].strip() if len(parts) > 1 else ""
         except Exception:
             # Do NOT block if fetch fails. FIDE fetch is an enhancement.
             pass
@@ -956,3 +973,37 @@ async def signup(
     )
 
     return {"message": "User created successfully"}
+
+
+@router.get("/auth/fide-info/{fide_id}")
+async def get_fide_info(fide_id: str):
+    try:
+        fide_data = await fetch_fide_player_info(fide_id.strip())
+        if not fide_data:
+            raise HTTPException(status_code=404, detail="FIDE player not found")
+        
+        # Parse name
+        fide_name = fide_data.get("name", "").strip()
+        first_name = ""
+        last_name = ""
+        if fide_name:
+            if "," in fide_name:
+                l_name, f_name = fide_name.split(",", 1)
+                first_name = f_name.strip()
+                last_name = l_name.strip()
+            else:
+                parts = fide_name.split(" ", 1)
+                first_name = parts[0].strip()
+                last_name = parts[1].strip() if len(parts) > 1 else ""
+                
+        return {
+            "first_name": first_name,
+            "last_name": last_name,
+            "classical_rating": fide_data.get("classical_rating", 0),
+            "rapid_rating": fide_data.get("rapid_rating", 0),
+            "blitz_rating": fide_data.get("blitz_rating", 0),
+            "title": fide_data.get("fide_title", ""),
+            "country": fide_data.get("federation", "India"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"FIDE lookup failed: {str(e)}")

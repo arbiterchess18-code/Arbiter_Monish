@@ -16,11 +16,13 @@ const processQueue = (error, token = null) => {
 };
 
 export const apiFetch = async (url, options = {}) => {
+    const token = sessionStorage.getItem("token");
     const mergedOptions = {
         ...options,
         credentials: "include",
         headers: {
             "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {}),
             ...(options.headers || {}),
         },
     };

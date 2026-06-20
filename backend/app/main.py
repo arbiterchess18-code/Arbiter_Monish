@@ -117,38 +117,17 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
-    origin = request.headers.get("origin", "")
-    normalized_origin = origin.rstrip("/")
-    is_local_origin = normalized_origin.startswith(
-        "http://localhost:") or normalized_origin.startswith("http://127.0.0.1:")
-    is_allowed_origin = normalized_origin in ALLOWED_ORIGINS or is_local_origin
-
-    def apply_cors_headers(response: Response) -> Response:
-        if is_allowed_origin and normalized_origin:
-            response.headers["Access-Control-Allow-Origin"] = normalized_origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = request.headers.get(
-                "access-control-request-headers",
-                "Authorization, Content-Type, Accept, Origin",
-            )
-            response.headers["Vary"] = "Origin"
-        return response
-
-    # Force CORS preflight support for all configured origins.
-    if request.method == "OPTIONS" and is_allowed_origin:
-        response = Response(status_code=204)
-        return apply_cors_headers(response)
-
+    # Only handle cache control and ensure error responses are wrapped.
+    # CORS is handled by the dedicated CORSMiddleware.
     try:
         response = await call_next(request)
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         response = JSONResponse(
             status_code=500,
             content={"detail": f"Internal server error: {type(exc).__name__}"},
         )
-
-    response = apply_cors_headers(response)
 
     if request.url.path.startswith("/users") or request.url.path.startswith("/api/v1/users"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"

@@ -193,6 +193,8 @@ def register_for_tournament(
         user_id=user_to_register_id,
         status=status_value,
         color_history=serialized_payload,
+        current_points=0.0,
+        seed=registration_data.seed or 0
     )
     db.add(new_registration)
     try:
@@ -627,6 +629,8 @@ def bulk_import_participants(
                 user_id=target_user.user_id,
                 status="approved",  # Bulk imported are auto-approved
                 registration_date=datetime.utcnow(),
+                current_points=0.0,
+                seed=participant.seed or 0,
                 color_history=json.dumps({
                     "rating": participant.player_rating,
                     "email": target_email,

@@ -81,8 +81,22 @@ def get_public_tournaments(
     db: Session = Depends(get_db)
 ):
     """Players can see all non-private tournaments that are published, upcoming, or active"""
-    query = db.query(models.Tournament).filter(
-        models.Tournament.is_private == False)
+    from sqlalchemy import func
+    
+    # Subquery to get registration counts to avoid N+1 and complex triple-join behavior
+    subquery = db.query(
+        models.TournamentRegistration.tournament_id,
+        func.count(models.TournamentRegistration.registration_id).label("registered_count")
+    ).filter(
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).group_by(models.TournamentRegistration.tournament_id).subquery()
+
+    query = db.query(
+        models.Tournament,
+        func.coalesce(subquery.c.registered_count, 0).label("registered_count")
+    ).outerjoin(
+        subquery, models.Tournament.tournament_id == subquery.c.tournament_id
+    ).filter(models.Tournament.is_private == False)
 
     if status and status != "all":
         query = query.filter(models.Tournament.status == status)
@@ -100,23 +114,40 @@ def get_public_tournaments(
             (models.Tournament.event_type == type)
         )
 
-    tournaments = query.order_by(models.Tournament.start_date.asc()).all()
-    for t in tournaments:
-        t.registered_count = db.query(models.TournamentRegistration).filter(
-            models.TournamentRegistration.tournament_id == t.tournament_id,
-            models.TournamentRegistration.status.in_(["approved", "active"])
-        ).count()
+    results = query.order_by(models.Tournament.start_date.asc()).all()
+    
+    # Map attributes back to tournament objects for Pydantic response compatibility
+    tournaments = []
+    for t_obj, count in results:
+        t_obj.registered_count = count
+        tournaments.append(t_obj)
+        
     return tournaments
 
 
 @router.get("", response_model=List[TournamentResponse])
 def list_tournaments(db: Session = Depends(get_db)):
-    tournaments = db.query(models.Tournament).all()
-    for t in tournaments:
-        t.registered_count = db.query(models.TournamentRegistration).filter(
-            models.TournamentRegistration.tournament_id == t.tournament_id,
-            models.TournamentRegistration.status.in_(["approved", "active"])
-        ).count()
+    from sqlalchemy import func
+    
+    subquery = db.query(
+        models.TournamentRegistration.tournament_id,
+        func.count(models.TournamentRegistration.registration_id).label("registered_count")
+    ).filter(
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).group_by(models.TournamentRegistration.tournament_id).subquery()
+
+    results = db.query(
+        models.Tournament,
+        func.coalesce(subquery.c.registered_count, 0).label("registered_count")
+    ).outerjoin(
+        subquery, models.Tournament.tournament_id == subquery.c.tournament_id
+    ).all()
+    
+    tournaments = []
+    for t_obj, count in results:
+        t_obj.registered_count = count
+        tournaments.append(t_obj)
+        
     return tournaments
 
 
@@ -127,12 +158,23 @@ def list_arbiter_tournaments(
     current_user: models.User = Depends(get_current_user)
 ):
     """Get tournaments created by the current arbiter or where they are a sub-arbiter"""
-    from sqlalchemy import or_
+    from sqlalchemy import or_, func
 
     uid = current_user.user_id
+    
+    subquery = db.query(
+        models.TournamentRegistration.tournament_id,
+        func.count(models.TournamentRegistration.registration_id).label("registered_count")
+    ).filter(
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).group_by(models.TournamentRegistration.tournament_id).subquery()
 
-    query = db.query(models.Tournament).options(
-        joinedload(models.Tournament.staff))
+    query = db.query(
+        models.Tournament,
+        func.coalesce(subquery.c.registered_count, 0).label("registered_count")
+    ).outerjoin(
+        subquery, models.Tournament.tournament_id == subquery.c.tournament_id
+    ).options(joinedload(models.Tournament.staff))
 
     if role == "sub_arbiter":
         query = query.join(models.TournamentStaff).filter(
@@ -146,13 +188,12 @@ def list_arbiter_tournaments(
             )
         ).distinct()
 
-    tournaments = query.all()
-
-    for t in tournaments:
-        t.registered_count = db.query(models.TournamentRegistration).filter(
-            models.TournamentRegistration.tournament_id == t.tournament_id,
-            models.TournamentRegistration.status.in_(["approved", "active"])
-        ).count()
+    results = query.all()
+    
+    tournaments = []
+    for t_obj, count in results:
+        t_obj.registered_count = count
+        tournaments.append(t_obj)
 
     return tournaments
 
@@ -446,3 +487,33 @@ def get_standings(tournament_id: int, db: Session = Depends(get_db)):
         "tie_break_names": top_tbs,
         "standings": final_standings,
     }
+
+
+@router.get("/{tournament_id}/standings/fast")
+def get_fast_standings(tournament_id: int, db: Session = Depends(get_db)):
+    """Optimized 'fast path' standings using cached current_points and seed"""
+    from sqlalchemy.orm import joinedload
+    
+    registrations = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).order_by(
+        models.TournamentRegistration.current_points.desc(),
+        models.TournamentRegistration.seed.asc()
+    ).all()
+
+    results = []
+    for i, reg in enumerate(registrations):
+        user = reg.user
+        results.append({
+            "rank": i + 1,
+            "user_id": reg.user_id,
+            "player_name": f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
+            "points": float(reg.current_points or 0),
+            "seed": reg.seed,
+            "is_bye": reg.bye_received
+        })
+        
+    return results

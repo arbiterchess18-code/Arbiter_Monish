@@ -70,11 +70,16 @@ async def get_my_profile(
                             "national_rank_all")
                     # Also try to populate name if missing
                     if not current_user.first_name and fide_data.get("name"):
-                        name_parts = fide_data.get(
-                            "name").strip().split(" ", 1)
-                        current_user.first_name = name_parts[0]
-                        current_user.last_name = name_parts[1] if len(
-                            name_parts) > 1 else ""
+                        fide_name = fide_data.get("name").strip()
+                        if "," in fide_name:
+                            l_name, f_name = fide_name.split(",", 1)
+                            current_user.first_name = f_name.strip()
+                            current_user.last_name = l_name.strip()
+                        else:
+                            name_parts = fide_name.split(" ", 1)
+                            current_user.first_name = name_parts[0].strip()
+                            current_user.last_name = name_parts[1].strip() if len(
+                                name_parts) > 1 else ""
 
                     db.commit()
                     db.refresh(current_user)
@@ -210,10 +215,15 @@ async def update_my_profile(
                     # Parse full name into first/last name
                     fide_name = fide_data.get("name", "").strip()
                     if fide_name:
-                        name_parts = fide_name.split(" ", 1)
-                        current_user.first_name = name_parts[0]
-                        current_user.last_name = name_parts[1] if len(
-                            name_parts) > 1 else ""
+                        if "," in fide_name:
+                            l_name, f_name = fide_name.split(",", 1)
+                            current_user.first_name = f_name.strip()
+                            current_user.last_name = l_name.strip()
+                        else:
+                            name_parts = fide_name.split(" ", 1)
+                            current_user.first_name = name_parts[0].strip()
+                            current_user.last_name = name_parts[1].strip() if len(
+                                name_parts) > 1 else ""
             except Exception:
                 pass  # Don't fail the save if FIDE API is down
 

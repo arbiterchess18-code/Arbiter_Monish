@@ -167,61 +167,68 @@ def get_tournament_pairings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    from sqlalchemy.orm import joinedload
+    
     tournament = db.query(models.Tournament).filter(
         models.Tournament.tournament_id == tournament_id).first()
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    approved_registrations = db.query(models.TournamentRegistration).filter(
+    # Fetch all approved registrations with users in one go
+    approved_registrations = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
         models.TournamentRegistration.status.in_(["approved", "active"])
     ).all()
 
+    # Pre-calculate display names
     registration_display_names = {}
     for reg in approved_registrations:
-        form_data = _decode_form_data(reg.color_history)
-        user = db.query(models.User).filter(
-            models.User.user_id == reg.user_id).first()
+        user = reg.user
         if not user:
             continue
-        fallback = (
-            f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username)
-        registration_display_names[reg.user_id] = _extract_display_name(
-            form_data, fallback)
+        form_data = _decode_form_data(reg.color_history)
+        fallback = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+        registration_display_names[reg.user_id] = _extract_display_name(form_data, fallback)
 
+    # Fetch rounds and matches with joined players
     rounds = db.query(models.Round).filter(
         models.Round.tournament_id == tournament_id
     ).order_by(models.Round.round_number.asc()).all()
 
-    pairings = []
-    for round_item in rounds:
-        matches = db.query(models.Match).filter(
-            models.Match.round_id == round_item.round_id
-        ).order_by(models.Match.board_number.asc()).all()
+    round_ids = [r.round_id for r in rounds]
+    matches = db.query(models.Match).options(
+        joinedload(models.Match.white_player),
+        joinedload(models.Match.black_player)
+    ).filter(
+        models.Match.round_id.in_(round_ids) if round_ids else models.Match.tournament_id == tournament_id
+    ).order_by(models.Match.board_number.asc()).all()
 
-        for match in matches:
-            white_player = db.query(models.User).filter(
-                models.User.user_id == match.white_player_id).first() if match.white_player_id else None
-            black_player = db.query(models.User).filter(
-                models.User.user_id == match.black_player_id).first() if match.black_player_id else None
-            pairings.append({
-                "match_id": match.match_id,
-                "round_number": round_item.round_number,
-                "board_number": match.board_number,
-                "white_player_id": match.white_player_id,
-                "white_player_name": registration_display_names.get(
-                    match.white_player_id,
-                    (f"{white_player.first_name or ''} {white_player.last_name or ''}".strip(
-                    ) if white_player else None) or (white_player.username if white_player else None),
-                ),
-                "black_player_id": match.black_player_id,
-                "black_player_name": registration_display_names.get(
-                    match.black_player_id,
-                    (f"{black_player.first_name or ''} {black_player.last_name or ''}".strip(
-                    ) if black_player else None) or (black_player.username if black_player else None),
-                ),
-                "result": match.result,
-            })
+    # Map matches back to rounds effectively
+    round_map = {r.round_id: r.round_number for r in rounds}
+    
+    pairings = []
+    for match in matches:
+        w = match.white_player
+        b = match.black_player
+        
+        pairings.append({
+            "match_id": match.match_id,
+            "round_number": round_map.get(match.round_id, 0),
+            "board_number": match.board_number,
+            "white_player_id": match.white_player_id,
+            "white_player_name": registration_display_names.get(
+                match.white_player_id,
+                (f"{w.first_name or ''} {w.last_name or ''}".strip() or w.username) if w else "TBD"
+            ),
+            "black_player_id": match.black_player_id,
+            "black_player_name": registration_display_names.get(
+                match.black_player_id,
+                (f"{b.first_name or ''} {b.last_name or ''}".strip() or b.username) if b else "BYE"
+            ),
+            "result": match.result,
+        })
 
     return {
         "approved_participants": len(approved_registrations),
