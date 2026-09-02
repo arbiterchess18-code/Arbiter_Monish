@@ -14,14 +14,17 @@ class TournamentRegistrationCreate(TournamentRegistrationBase):
     player_phone: Optional[str] = None
     player_rating: Optional[int] = None
     player_fide_id: Optional[str] = None
+    seed: Optional[int] = 0
 
 
 class BulkParticipantImport(BaseModel):
-    """Schema for bulk participant import from Excel"""
+    """Schema for bulk participant import from Excel or TRF"""
     class ParticipantData(BaseModel):
         player_name: str
         player_email: str
         player_rating: Optional[int] = 0
+        player_fide_id: Optional[str] = None
+        seed: Optional[int] = 0
         registered_date: Optional[str] = None
 
     participants: List[ParticipantData]

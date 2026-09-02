@@ -617,6 +617,7 @@ def bulk_import_participants(
                     first_name=participant.player_name,
                     hashed_password=get_password_hash("imported123"),
                     fide_rating=participant.player_rating or 0,
+                    fide_id=participant.player_fide_id or None,
                     is_active=True,
                     is_verified=True,
                 )
@@ -639,9 +640,11 @@ def bulk_import_participants(
                 })
             )
 
-            # Update user rating if provided
+            # Update user rating and FIDE ID if provided
             if participant.player_rating:
                 target_user.fide_rating = participant.player_rating
+            if participant.player_fide_id:
+                target_user.fide_id = participant.player_fide_id
 
             db.add(registration)
             db.flush()

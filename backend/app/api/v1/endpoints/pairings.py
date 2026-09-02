@@ -316,38 +316,60 @@ def _generate_pairings_for_round(db: Session, tournament: models.Tournament, rou
         rotation = (next_round - 1) % max(len(sorted_regs), 1)
         sorted_regs = sorted_regs[rotation:] + sorted_regs[:rotation]
     else:
-        # Standard Swiss-ish sorting by points then ID
-        sorted_regs = sorted(
-            approved_registrations,
-            key=lambda registration: (
-                float(registration.current_points or 0), registration.registration_id),
-            reverse=True,
-        )
+        # FIDE Dutch Swiss pairing using JaVaFo
+        from ....pairing_engine import build_trfx, run_javafo, parse_pairings
+        
+        try:
+            # 1. Build the TRFx input file (assigns seeds if needed)
+            trfx_input = build_trfx(tournament, next_round, approved_registrations, db)
+            
+            # 2. Run JaVaFo in pairing mode
+            pairings_output = run_javafo(trfx_input, mode="pair")
+            
+            # 3. Parse output pairings
+            javafo_pairings = parse_pairings(pairings_output)
+        except (RuntimeError, FileNotFoundError) as e:
+            # Handle JRE missing error or execution error
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Swiss pairing generation failed: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred during Swiss pairing: {str(e)}"
+            )
 
-    board_number = 1
-    index = 0
-    while index < len(sorted_regs):
-        white_reg = sorted_regs[index]
-        black_reg = sorted_regs[index + 1] if index + \
-            1 < len(sorted_regs) else None
-
-        new_match = models.Match(
-            tournament_id=tournament.tournament_id,
-            round_id=round_record.round_id,
-            white_player_id=white_reg.user_id,
-            black_player_id=black_reg.user_id if black_reg else None,
-            board_number=board_number,
-            result="1-0" if not black_reg else None,  # BYE gives 1 point
-        )
-        db.add(new_match)
-
-        # Update cache points for BYE (Standings will recalculate anyway, but for immediate UI consistency)
-        if not black_reg:
-            white_reg.current_points = float(
-                white_reg.current_points or 0) + 1.0
-
-        board_number += 1
-        index += 2
+        # 4. Map the pairings back to users and save to DB
+        reg_by_seed = {reg.seed: reg for reg in approved_registrations}
+        
+        board_number = 1
+        for pairing in javafo_pairings:
+            white_reg = reg_by_seed.get(pairing.white_seed)
+            black_reg = reg_by_seed.get(pairing.black_seed) if pairing.black_seed else None
+            
+            if not white_reg:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Pairing reference error: player with seed {pairing.white_seed} not found."
+                )
+                
+            new_match = models.Match(
+                tournament_id=tournament.tournament_id,
+                round_id=round_record.round_id,
+                white_player_id=white_reg.user_id,
+                black_player_id=black_reg.user_id if black_reg else None,
+                board_number=board_number,
+                result="1-0" if not black_reg else None,  # BYE gives 1 point
+            )
+            db.add(new_match)
+            
+            # Update cache points for BYE (Standings will recalculate anyway, but for immediate UI consistency)
+            if not black_reg:
+                white_reg.current_points = float(
+                    white_reg.current_points or 0) + 1.0
+                    
+            board_number += 1
 
 
 @router.post("/{tournament_id}/pairings/start")
@@ -547,3 +569,64 @@ def seed_players(
 
     db.commit()
     return {"message": f"Successfully seeded {seeded_count} players", "total_players": len(test_players)}
+
+
+@router.post("/{tournament_id}/pairings/check")
+def check_pairing_integrity(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id
+    ).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if not is_tournament_creator_or_admin(tournament, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only tournament creator or admin can run pairing checks"
+        )
+
+    if (tournament.pairing_system or "Swiss").lower() != "swiss":
+        raise HTTPException(
+            status_code=400,
+            detail="Integrity check is only supported for Swiss tournaments"
+        )
+
+    current_round = tournament.current_round or 0
+    if current_round == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No rounds have been paired yet for this tournament"
+        )
+
+    approved_registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active"])
+    ).all()
+
+    if not approved_registrations:
+        raise HTTPException(
+            status_code=400,
+            detail="No approved registrations found for this tournament"
+        )
+
+    from ....pairing_engine import build_trfx, run_javafo
+
+    try:
+        trfx_input = build_trfx(tournament, current_round + 1, approved_registrations, db)
+        check_output = run_javafo(trfx_input, mode="check")
+        return {"logs": check_output}
+    except (RuntimeError, FileNotFoundError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"JaVaFo integrity check failed: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred during integrity check: {str(e)}"
+        )
+

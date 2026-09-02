@@ -444,6 +444,8 @@ export const importParticipantsFromExcel = async (
       player_name: participant.playerName,
       player_email: participant.email,
       player_rating: participant.rating || 0,
+      player_fide_id: participant.fideId || undefined,
+      seed: participant.seed || 0,
       registered_date: participant.registeredDate,
       is_manual: true,
     })),
@@ -471,7 +473,7 @@ export const importParticipantsFromExcel = async (
             email: participant.email,
             rating: participant.rating,
             phone: "",
-            fideId: "",
+            fideId: participant.fideId || "",
           });
           imported.push(reg);
         } catch (error) {

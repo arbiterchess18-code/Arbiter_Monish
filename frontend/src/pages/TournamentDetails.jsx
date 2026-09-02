@@ -57,7 +57,7 @@ import {
 import { useRole } from "@/lib/role-context";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
 import { ManualRegistrationDialog } from "@/components/ManualRegistrationDialog";
-import { ExcelImportDialog } from "@/components/ExcelImportDialog";
+import { ParticipantImportDialog } from "@/components/ParticipantImportDialog";
 
 const statusColors = {
   active: "bg-success/15 text-success border-success/30",
@@ -89,6 +89,18 @@ export default function TournamentDetails() {
   const [roundsInfo, setRoundsInfo] = useState([]);
   // Authoritative current user fetched from API (not sessionStorage)
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Reset all tournament-specific states when the tournament ID changes
+  // to prevent stale data leaking from a previously viewed tournament.
+  useEffect(() => {
+    setTournament(null);
+    setStandings([]);
+    setRegistrations([]);
+    setPairings([]);
+    setRoundsInfo([]);
+    setSelectedRound(1);
+    setLoading(true);
+  }, [id]);
 
   // Fix 4: wrap in useCallback so useEffect has a stable dep reference
   const loadTournament = useCallback(async () => {
@@ -920,7 +932,7 @@ export default function TournamentDetails() {
                         className="gap-2"
                       >
                         <Upload className="h-4 w-4" />
-                        Import from Excel
+                        Import Participants
                       </Button>
                     )}
                     {isArbiter && (
@@ -1556,8 +1568,8 @@ export default function TournamentDetails() {
         onSubmit={handleManualRegistration}
       />
 
-      {/* Excel Import Dialog */}
-      <ExcelImportDialog
+      {/* Participant Import Dialog */}
+      <ParticipantImportDialog
         isOpen={isImportDialogOpen}
         onClose={() => setIsImportDialogOpen(false)}
         onSubmit={handleImportExcel}
