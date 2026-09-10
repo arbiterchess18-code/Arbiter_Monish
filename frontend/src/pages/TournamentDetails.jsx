@@ -33,6 +33,7 @@ import {
   Flag,
   Printer,
   Upload,
+  Filter,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ import { useRole } from "@/lib/role-context";
 import { JoinTournamentDialog } from "@/components/JoinTournamentDialog";
 import { ManualRegistrationDialog } from "@/components/ManualRegistrationDialog";
 import { ParticipantImportDialog } from "@/components/ParticipantImportDialog";
+import { PairingSettingsFloatingButton } from "@/components/PairingSettingsFloatingButton";
 
 const statusColors = {
   active: "bg-success/15 text-success border-success/30",
@@ -89,6 +91,13 @@ export default function TournamentDetails() {
   const [roundsInfo, setRoundsInfo] = useState([]);
   // Authoritative current user fetched from API (not sessionStorage)
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Pairing settings & filter state
+  const [pairingSearchQuery, setPairingSearchQuery] = useState("");
+  const [pairingFilterStatus, setPairingFilterStatus] = useState("all");
+  const [pairingDensity, setPairingDensity] = useState("normal");
+  const [pairingHighlightPending, setPairingHighlightPending] = useState(false);
+  const [pairingAutoRefresh, setPairingAutoRefresh] = useState(0);
 
   // Reset all tournament-specific states when the tournament ID changes
   // to prevent stale data leaking from a previously viewed tournament.
@@ -438,14 +447,27 @@ export default function TournamentDetails() {
   // Fix 3: robust result check — only count known valid results as "played"
   const isMatchPlayed = (res) => ["1-0", "0-1", "1/2-1/2", "0-0"].includes(res);
 
-  const filteredPairings = pairings.filter(
+  const selectedRoundPairings = pairings.filter(
     (p) => p.round_number === selectedRound,
   );
 
   // incompleteMatches scoped to the SELECTED round (what the arbiter is viewing)
-  const incompleteMatches = filteredPairings.filter(
+  const incompleteMatches = selectedRoundPairings.filter(
     (p) => !isMatchPlayed(p.result),
   ).length;
+
+  const filteredPairings = selectedRoundPairings.filter((p) => {
+    if (pairingFilterStatus === "pending" && isMatchPlayed(p.result)) return false;
+    if (pairingFilterStatus === "completed" && !isMatchPlayed(p.result)) return false;
+    if (pairingSearchQuery.trim()) {
+      const q = pairingSearchQuery.toLowerCase();
+      const boardMatch = String(p.board_number || "").includes(q);
+      const whiteMatch = (p.white_player_name || "").toLowerCase().includes(q);
+      const blackMatch = (p.black_player_name || "").toLowerCase().includes(q);
+      if (!boardMatch && !whiteMatch && !blackMatch) return false;
+    }
+    return true;
+  });
 
   // actualCurrentRound: most authoritative source is roundsInfo max; fall back to tournament field
   const actualCurrentRound =
@@ -1213,72 +1235,134 @@ export default function TournamentDetails() {
                     )}
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="w-16 text-center">
-                        Board #
-                      </TableHead>
-                      <TableHead>White</TableHead>
-                      <TableHead className="text-center w-24">Score</TableHead>
-                      <TableHead>Black</TableHead>
-                      {permissions.canUpdateResults && pairings.length > 0 && (
-                        <TableHead className="text-right w-48">
-                          Actions
-                        </TableHead>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPairings?.map((match) => (
-                      <TableRow key={match.match_id} className="h-12">
-                        <TableCell className="text-center font-bold text-muted-foreground border-r">
-                          {match.board_number}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {match.white_player_name || "—"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            variant={match.result ? "default" : "outline"}
-                            className={`font-mono px-3 py-1 ${match.result ? "bg-primary/20 text-primary border-primary/30" : "text-muted-foreground border-dashed"}`}
+                <>
+                  {/* Active Filter Indicator Banner */}
+                  {(pairingSearchQuery || pairingFilterStatus !== "all") && (
+                    <div className="flex items-center justify-between bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-lg mb-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-3.5 w-3.5 text-primary" />
+                        <span>
+                          Showing <strong>{filteredPairings.length}</strong> of{" "}
+                          <strong>{selectedRoundPairings.length}</strong> boards
+                          {pairingSearchQuery ? ` matching "${pairingSearchQuery}"` : ""}
+                          {pairingFilterStatus !== "all" ? ` (${pairingFilterStatus})` : ""}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="h-6 text-xs text-primary hover:text-primary/80 font-medium"
+                        onClick={() => {
+                          setPairingSearchQuery("");
+                          setPairingFilterStatus("all");
+                        }}
+                      >
+                        Clear Filter
+                      </Button>
+                    </div>
+                  )}
+
+                  {filteredPairings.length === 0 && selectedRoundPairings.length > 0 ? (
+                    <div className="text-center py-10 text-muted-foreground flex flex-col items-center justify-center">
+                      <Filter className="h-8 w-8 mb-2 opacity-40" />
+                      <p className="text-sm font-medium">No boards match your filter</p>
+                      <p className="text-xs mt-1">Try clearing your search query or status filter.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 text-xs"
+                        onClick={() => {
+                          setPairingSearchQuery("");
+                          setPairingFilterStatus("all");
+                        }}
+                      >
+                        Reset Filter
+                      </Button>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead className="w-16 text-center">
+                            Board #
+                          </TableHead>
+                          <TableHead>White</TableHead>
+                          <TableHead className="text-center w-24">Score</TableHead>
+                          <TableHead>Black</TableHead>
+                          {permissions.canUpdateResults && pairings.length > 0 && (
+                            <TableHead className="text-right w-48">
+                              Actions
+                            </TableHead>
+                          )}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredPairings?.map((match) => (
+                          <TableRow
+                            key={match.match_id}
+                            className={`transition-colors ${
+                              pairingDensity === "compact" ? "h-9 text-xs" : "h-12"
+                            } ${
+                              pairingHighlightPending && !isMatchPlayed(match.result)
+                                ? "bg-amber-500/10 hover:bg-amber-500/15 border-l-2 border-l-amber-500"
+                                : ""
+                            }`}
                           >
-                            {match.result || "vs"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {match.black_player_name || (
-                            <span className="text-muted-foreground italic">
-                              BYE
-                            </span>
-                          )}
-                        </TableCell>
-                        {permissions.canUpdateResults &&
-                          pairings.length > 0 && (
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                {["1-0", "1/2-1/2", "0-1", "0-0"].map((r) => (
-                                  <Button
-                                    key={r}
-                                    size="sm"
-                                    variant={
-                                      match.result === r ? "default" : "outline"
-                                    }
-                                    className={`h-8 px-3 text-xs font-mono transition-all ${match.result === r ? "shadow-md bg-primary text-primary-foreground" : "hover:border-primary/50"}`}
-                                    onClick={() =>
-                                      handleUpdateResult(match.match_id, r)
-                                    }
-                                  >
-                                    {r === "1/2-1/2" ? "½-½" : r}
-                                  </Button>
-                                ))}
-                              </div>
+                            <TableCell className="text-center font-bold text-muted-foreground border-r">
+                              {match.board_number}
                             </TableCell>
-                          )}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            <TableCell className="font-medium">
+                              {match.white_player_name || "—"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge
+                                variant={match.result ? "default" : "outline"}
+                                className={`font-mono px-3 py-1 ${match.result ? "bg-primary/20 text-primary border-primary/30" : "text-muted-foreground border-dashed"}`}
+                              >
+                                {match.result || "vs"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {match.black_player_name || (
+                                <span className="text-muted-foreground italic">
+                                  BYE
+                                </span>
+                              )}
+                            </TableCell>
+                            {permissions.canUpdateResults &&
+                              pairings.length > 0 && (
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    {["1-0", "1/2-1/2", "0-1", "0-0"].map((r) => (
+                                      <Button
+                                        key={r}
+                                        size="sm"
+                                        variant={
+                                          match.result === r ? "default" : "outline"
+                                        }
+                                        className={`${
+                                          pairingDensity === "compact" ? "h-7 px-2 text-[11px]" : "h-8 px-3 text-xs"
+                                        } font-mono transition-all ${
+                                          match.result === r
+                                            ? "shadow-md bg-primary text-primary-foreground"
+                                            : "hover:border-primary/50"
+                                        }`}
+                                        onClick={() =>
+                                          handleUpdateResult(match.match_id, r)
+                                        }
+                                      >
+                                        {r === "1/2-1/2" ? "½-½" : r}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                              )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </>
               )}
 
               {/* Arbiter Controls at Bottom */}
@@ -1574,6 +1658,41 @@ export default function TournamentDetails() {
         onClose={() => setIsImportDialogOpen(false)}
         onSubmit={handleImportExcel}
       />
+
+      {/* Floating Settings Button for Pairings */}
+      {activeTab === "pairings" && (
+        <PairingSettingsFloatingButton
+          tournament={tournament}
+          isArbiter={isArbiter}
+          selectedRound={selectedRound}
+          setSelectedRound={setSelectedRound}
+          availableRounds={availableRounds}
+          actualCurrentRound={actualCurrentRound}
+          isCurrentRoundSubmitted={isCurrentRoundSubmitted}
+          isSelectedRoundSubmitted={isSelectedRoundSubmitted}
+          actualIncompleteMatches={actualIncompleteMatches}
+          incompleteMatches={incompleteMatches}
+          generatingPairings={generatingPairings}
+          canGenerateNextRound={canGenerateNextRound}
+          isFinalRound={isFinalRound}
+          permissions={permissions}
+          onGenerateNextRound={handleGenerateNextRound}
+          onFinalizeRound={handleFinalizeRound}
+          onRegeneratePairings={handleRegeneratePairings}
+          onCompleteTournament={handleCompleteTournament}
+          onRefresh={refreshPairingsState}
+          searchQuery={pairingSearchQuery}
+          setSearchQuery={setPairingSearchQuery}
+          filterStatus={pairingFilterStatus}
+          setFilterStatus={setPairingFilterStatus}
+          density={pairingDensity}
+          setDensity={setPairingDensity}
+          highlightPending={pairingHighlightPending}
+          setHighlightPending={setPairingHighlightPending}
+          autoRefreshInterval={pairingAutoRefresh}
+          setAutoRefreshInterval={setPairingAutoRefresh}
+        />
+      )}
     </div>
   );
 }
