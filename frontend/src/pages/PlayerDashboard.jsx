@@ -264,18 +264,13 @@ const PlayerDashboard = () => {
         ) : myTournaments.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {myTournaments.map((t, i) => (
-              <div
-                key={t.tournament_id}
-                className="cursor-pointer h-full"
-                onClick={() => navigate(`/tournament/${t.tournament_id}`)}
-              >
-                <TournamentCard
-                  tournament={t}
-                  index={i}
-                  isParticipating
-                  hideActions
-                />
-              </div>
+              <TournamentCard
+                key={t.tournament_id || t.id}
+                tournament={t}
+                index={i}
+                isParticipating
+                showViewDetails
+              />
             ))}
           </div>
         ) : (
@@ -298,7 +293,7 @@ const PlayerDashboard = () => {
         {activeTournaments.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {activeTournaments.map((t, i) => (
-              <TournamentCard key={t.id} tournament={t} index={i} />
+              <TournamentCard key={t.id} tournament={t} index={i} showViewDetails />
             ))}
           </div>
         ) : (

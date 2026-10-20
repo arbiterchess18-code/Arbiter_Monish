@@ -33,6 +33,18 @@ try:
             # SQLite does not enforce VARCHAR length strictly, so no table rewrite is needed.
             pass
 
+        # Check and add is_absent and absent_round columns if missing
+        try:
+            from sqlalchemy import inspect
+            inspector = inspect(conn)
+            cols = [col["name"] for col in inspector.get_columns("tournament_registrations")]
+            if "is_absent" not in cols:
+                conn.execute(text("ALTER TABLE tournament_registrations ADD COLUMN is_absent BOOLEAN DEFAULT 0"))
+            if "absent_round" not in cols:
+                conn.execute(text("ALTER TABLE tournament_registrations ADD COLUMN absent_round INTEGER"))
+        except Exception as _mig_err:
+            pass
+
     # Ensure all required roles exist
     from sqlalchemy.orm import Session
     db = Session(engine)
@@ -145,6 +157,38 @@ app.include_router(notifications.router)
 app.include_router(leaderboard.router,
                    prefix="/api/v1/leaderboard", tags=["Leaderboard"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
+
+
+# Spec-specific root aliases: /api/tournament/{id}/player/{id}/absent and /restore
+@app.post("/api/tournament/{tournament_id}/player/{player_id}/absent", tags=["Pairings"])
+def api_mark_player_absent(tournament_id: int, player_id: int, request: Request):
+    from .api.v1.endpoints.pairings import _mark_player_absent_impl
+    from .database import SessionLocal
+    from .core.security import get_current_user
+    db = SessionLocal()
+    try:
+        # Note: fast dependency resolution
+        auth_header = request.headers.get("Authorization") or ""
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+        user = get_current_user(request=request, token=token, db=db)
+        return _mark_player_absent_impl(tournament_id, player_id, db, user)
+    finally:
+        db.close()
+
+
+@app.post("/api/tournament/{tournament_id}/player/{player_id}/restore", tags=["Pairings"])
+def api_restore_player(tournament_id: int, player_id: int, request: Request):
+    from .api.v1.endpoints.pairings import _restore_absent_player_impl
+    from .database import SessionLocal
+    from .core.security import get_current_user
+    db = SessionLocal()
+    try:
+        auth_header = request.headers.get("Authorization") or ""
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+        user = get_current_user(request=request, token=token, db=db)
+        return _restore_absent_player_impl(tournament_id, player_id, db, user)
+    finally:
+        db.close()
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { TournamentCard } from "@/components/TournamentCard";
@@ -17,11 +17,36 @@ import {
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { mockTournaments } from "@/lib/mock-data";
+import { getPublicTournaments } from "@/lib/tournament-service";
 
 export default function UserHome() {
   const navigate = useNavigate();
   const [joinTournament, setJoinTournament] = useState(null);
-  const upcomingTournaments = mockTournaments.slice(0, 2);
+  const [upcomingTournaments, setUpcomingTournaments] = useState(mockTournaments.slice(0, 2));
+
+  useEffect(() => {
+    getPublicTournaments()
+      .then((realTournaments) => {
+        if (realTournaments && realTournaments.length > 0) {
+          const standardized = realTournaments.map((t) => ({
+            ...t,
+            id: t.tournament_id,
+            name: t.tournament_name,
+            pairingSystem: t.pairing_system,
+            isRated: t.is_rated,
+            timeControl: t.time_control,
+            startDate: t.start_date,
+            maxPlayers: t.max_players,
+            location: t.venue_name ? `${t.venue_name}, ${t.city}` : t.city || "Offline",
+          }));
+          setUpcomingTournaments(standardized.slice(0, 4));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load home tournaments:", err);
+      });
+  }, []);
+
 
   return (
     <div className="space-y-12 pb-12">
@@ -186,6 +211,7 @@ export default function UserHome() {
               index={i}
               showJoin
               onJoin={setJoinTournament}
+              showViewDetails
             />
           ))}
         </div>

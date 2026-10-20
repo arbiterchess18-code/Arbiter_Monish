@@ -1414,3 +1414,57 @@ export const completeTournament = async (tournamentId) => {
 
   return await response.json();
 };
+
+// ==================== ABSENT / EXCLUDED PLAYERS MANAGEMENT (SWISS-MANAGER) ====================
+
+/**
+ * Fetch categorized active and absent players for a tournament
+ */
+export const getAbsentPlayers = async (tournamentId) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/absent-players`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to load absent players");
+  }
+
+  return await response.json();
+};
+
+/**
+ * Mark a player as absent (excluded from upcoming pairings)
+ */
+export const markPlayerAbsent = async (tournamentId, playerId, roundNumber = null) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/players/${playerId}/absent`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(roundNumber !== null ? { round_number: roundNumber } : {}),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to mark player as absent");
+  }
+
+  return await response.json();
+};
+
+/**
+ * Restore an absent player back to the active pairing pool
+ */
+export const restorePlayer = async (tournamentId, playerId) => {
+  const response = await fetch(`${API_URL}/tournaments/${tournamentId}/players/${playerId}/restore`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to restore player to pairings");
+  }
+
+  return await response.json();
+};
+

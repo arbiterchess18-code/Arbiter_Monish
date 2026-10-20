@@ -19,9 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Play, Save, RefreshCw } from "lucide-react";
+import { ArrowLeft, Play, Save, RefreshCw, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ManageAbsentPlayersDialog } from "@/components/ManageAbsentPlayersDialog";
 import {
   getTournamentById,
   getTournamentPairings,
@@ -39,6 +40,7 @@ export default function TournamentPairings() {
   const [results, setResults] = useState({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [showAbsentDialog, setShowAbsentDialog] = useState(false);
 
   const currentUser = JSON.parse(sessionStorage.getItem("userData") || "{}");
   const currentUserId = currentUser.user_id || currentUser.id;
@@ -146,6 +148,12 @@ export default function TournamentPairings() {
   const isSubArbiter = (tournament.staff || []).some((sa) =>
     typeof sa === "object" ? sa.user_id == currentUserId : sa == currentUserId,
   );
+  const isAuthorizedArbiter =
+    isMainArbiter ||
+    isSubArbiter ||
+    currentUser.role === "arbiter" ||
+    currentUser.role === "admin" ||
+    currentUser.role === "organizer";
 
   const canGeneratePairings = currentRound <= tournament.rounds;
   const hasUnsavedPairings = pairings.length > 0;
@@ -181,8 +189,20 @@ export default function TournamentPairings() {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              {isMainArbiter && !hasUnsavedPairings && canGeneratePairings && (
+            <div className="flex gap-2 items-center">
+              {isAuthorizedArbiter && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAbsentDialog(true)}
+                  className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold shadow-sm"
+                  size="lg"
+                >
+                  <UserX className="h-4 w-4 mr-2" />
+                  Manage Absent Players
+                </Button>
+              )}
+
+              {isAuthorizedArbiter && !hasUnsavedPairings && canGeneratePairings && (
                 <Button
                   onClick={handleGeneratePairings}
                   disabled={generating}
@@ -202,7 +222,7 @@ export default function TournamentPairings() {
                 </Button>
               )}
 
-              {isMainArbiter && hasUnsavedPairings && (
+              {isAuthorizedArbiter && hasUnsavedPairings && (
                 <Button
                   onClick={handleSubmitResults}
                   size="lg"
@@ -389,6 +409,15 @@ export default function TournamentPairings() {
           </CardContent>
         </Card>
       )}
+
+      {/* Manage Absent Players Modal */}
+      <ManageAbsentPlayersDialog
+        isOpen={showAbsentDialog}
+        onClose={() => setShowAbsentDialog(false)}
+        tournamentId={id}
+        currentRound={tournament?.current_round || currentRound}
+        onStatusChanged={loadTournamentData}
+      />
     </div>
   );
 }

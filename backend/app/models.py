@@ -235,6 +235,8 @@ class TournamentRegistration(Base):
     # Stores serialized form payload / color history
     color_history = Column(Text, default="")
     bye_received = Column(Boolean, default=False)
+    is_absent = Column(Boolean, default=False)
+    absent_round = Column(Integer, nullable=True)
 
     tournament = relationship("Tournament", back_populates="registrations")
     user = relationship("User", back_populates="registrations")

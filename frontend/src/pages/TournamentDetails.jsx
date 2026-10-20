@@ -21,6 +21,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Trophy,
   Users,
   Calendar,
@@ -34,7 +42,9 @@ import {
   Printer,
   Upload,
   Filter,
+  UserX,
 } from "lucide-react";
+import { ManageAbsentPlayersDialog } from "@/components/ManageAbsentPlayersDialog";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -82,6 +92,8 @@ export default function TournamentDetails() {
   const [participantSubTab, setParticipantSubTab] = useState("players");
   const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [showAbsentDialog, setShowAbsentDialog] = useState(false);
+  const [showStartRound1Dialog, setShowStartRound1Dialog] = useState(false);
   const [pairings, setPairings] = useState([]);
   const [pairingsLoading, setPairingsLoading] = useState(false);
   const [generatingPairings, setGeneratingPairings] = useState(false);
@@ -241,10 +253,13 @@ export default function TournamentDetails() {
     try {
       await startTournament(id);
       toast.success(
-        "Tournament started! Generate Round 1 from the Pairings tab.",
+        "Tournament started! Review attendance or generate Round 1 pairings.",
       );
       await refreshPairingsState();
       setActiveTab("pairings");
+      if (actualCurrentRound === 0) {
+        setShowStartRound1Dialog(true);
+      }
     } catch (error) {
       toast.error(error.message);
     }
@@ -318,7 +333,11 @@ export default function TournamentDetails() {
     }
   };
 
-  const handleGenerateNextRound = async () => {
+  const handleGenerateNextRound = async (skipAttendanceCheck = false) => {
+    if (actualCurrentRound === 0 && !skipAttendanceCheck) {
+      setShowStartRound1Dialog(true);
+      return;
+    }
     setGeneratingPairings(true);
     try {
       await startTournamentPairing(id);
@@ -420,8 +439,18 @@ export default function TournamentDetails() {
 
   if (!tournament) return null;
 
-  // Simple: any arbiter sees all action buttons
-  const isArbiter = role === "arbiter";
+  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
+  const currentUserId = currentUser?.user_id || userData.user_id;
+
+  // Comprehensive arbiter/admin permission check
+  const isArbiter =
+    role === "arbiter" ||
+    role === "admin" ||
+    role === "organizer" ||
+    userData.role === "arbiter" ||
+    userData.role === "admin" ||
+    userData.role === "organizer" ||
+    tournament.created_by == currentUserId;
 
   const permissions = {
     canGeneratePairings: isArbiter,
@@ -469,11 +498,11 @@ export default function TournamentDetails() {
     return true;
   });
 
-  // actualCurrentRound: most authoritative source is roundsInfo max; fall back to tournament field
+  // actualCurrentRound: accurately derived from roundsInfo. If no rounds created yet, it's 0!
   const actualCurrentRound =
-    roundsInfo.length > 0
-      ? Math.max(...roundsInfo?.map((r) => r.round_number))
-      : tournament.current_round || tournament.currentRound || 0;
+    roundsInfo && roundsInfo.length > 0
+      ? Math.max(...roundsInfo.map((r) => r.round_number))
+      : 0;
 
   const isFinalRound =
     actualCurrentRound > 0 && actualCurrentRound === tournament.rounds;
@@ -507,19 +536,12 @@ export default function TournamentDetails() {
 
   const sortedStandings = standings;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const startDate = new Date(tournament.startDate);
-  startDate.setHours(0, 0, 0, 0);
-
-  const canStartTournament = today >= startDate;
+  const canStartTournament = isArbiter;
 
   const canRegister =
     (tournament.status === "upcoming" || tournament.status === "published") &&
     approvedRegistrations.length < parseInt(tournament.max_players || 64);
 
-  const userData = JSON.parse(sessionStorage.getItem("userData") || "{}");
-  const currentUserId = currentUser?.user_id || userData.user_id;
   const isRegistered = registrations.some(
     (r) => r.user_email === userData.email,
   );
@@ -1367,9 +1389,21 @@ export default function TournamentDetails() {
 
               {/* Arbiter Controls at Bottom */}
               {permissions.canFinalizeRound &&
-                tournament.status === "active" && (
+                (tournament.status === "active" ||
+                  tournament.status === "upcoming" ||
+                  tournament.status === "published") && (
                   <div className="mt-8 pt-6 border-t-2 border-dashed border-border flex flex-col gap-4">
                     <div className="flex flex-wrap items-center justify-end gap-4">
+                      {/* MANAGE ABSENT PLAYERS (Swiss-Manager Exclusion/Restoration) */}
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowAbsentDialog(true)}
+                        className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold px-4 shadow-sm"
+                      >
+                        <UserX className="h-4 w-4 mr-2" />
+                        Manage Absent Players
+                      </Button>
+
                       {/* GENERATE — only shown while rounds remain */}
                       {actualCurrentRound < (tournament.rounds || 100) && (
                         <div className="flex flex-col items-end gap-1">
@@ -1419,7 +1453,8 @@ export default function TournamentDetails() {
                               </span>
                             )}
                           {incompleteMatches === 0 &&
-                            !isSelectedRoundSubmitted && (
+                            !isSelectedRoundSubmitted &&
+                            selectedRoundPairings.length > 0 && (
                               <span className="text-xs text-success font-medium animate-pulse">
                                 All results entered — ready to finalize ➔
                               </span>
@@ -1433,7 +1468,8 @@ export default function TournamentDetails() {
                               isSelectedRoundSubmitted ||
                               incompleteMatches > 0 ||
                               generatingPairings ||
-                              selectedRound === 0
+                              selectedRound === 0 ||
+                              selectedRoundPairings.length === 0
                             }
                             className={`min-w-[200px] shadow-sm transition-all ${
                               !isSelectedRoundSubmitted &&
@@ -1658,6 +1694,63 @@ export default function TournamentDetails() {
         onClose={() => setIsImportDialogOpen(false)}
         onSubmit={handleImportExcel}
       />
+
+      {/* Manage Absent Players Dialog */}
+      <ManageAbsentPlayersDialog
+        isOpen={showAbsentDialog}
+        onClose={() => setShowAbsentDialog(false)}
+        tournamentId={id}
+        currentRound={actualCurrentRound}
+        onStatusChanged={loadTournament}
+      />
+
+      {/* Round 1 Pre-generation Attendance Check Dialog */}
+      <Dialog open={showStartRound1Dialog} onOpenChange={setShowStartRound1Dialog}>
+        <DialogContent className="max-w-md bg-card border-border shadow-2xl rounded-2xl">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                <Users className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-base font-bold">
+                Round 1 Attendance Check
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              Before generating Round 1 pairings, ensure that all present players are checked in.
+              <br /><br />
+              Do any registered players need to be marked <strong>absent</strong> for Round 1?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowStartRound1Dialog(false);
+                setShowAbsentDialog(true);
+              }}
+              className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-semibold rounded-xl text-xs flex-1"
+            >
+              <UserX className="h-4 w-4 mr-1.5" />
+              Mark Absent Players First
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                setShowStartRound1Dialog(false);
+                handleGenerateNextRound(true);
+              }}
+              className="rounded-xl text-xs font-semibold flex-1"
+            >
+              <Play className="h-4 w-4 mr-1.5 text-chess-gold" />
+              All Present — Generate Round 1
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Floating Settings Button for Pairings */}
       {activeTab === "pairings" && (

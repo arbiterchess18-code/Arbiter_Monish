@@ -129,19 +129,15 @@ export default function TournamentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
           {allTournaments.map((t, i) => (
-            <div
+            <TournamentCard
               key={t.id}
-              onClick={() => handleCardClick(t)}
-              className="cursor-pointer h-full"
-            >
-              <TournamentCard
-                tournament={t}
-                index={i}
-                showJoin
-                onJoin={setJoinTournament}
-                isParticipating={myRegisteredIds.has(t.id)}
-              />
-            </div>
+              tournament={t}
+              index={i}
+              showJoin
+              onJoin={setJoinTournament}
+              isParticipating={myRegisteredIds.has(t.id)}
+              showViewDetails
+            />
           ))}
         </div>
       )}

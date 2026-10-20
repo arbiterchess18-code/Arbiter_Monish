@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 import json
 
 from .... import models
 from ....database import get_db
-from ....core.security import get_current_user, is_tournament_creator_or_admin, get_password_hash
+from ....core.security import get_current_user, is_tournament_creator_or_admin, is_tournament_staff_or_admin, get_password_hash
 from ....schemas.match import PairingResponse, MatchResultUpdate
 from ....services import notification_service
 
@@ -80,9 +81,9 @@ def submit_match_result(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can submit results")
+            status_code=403, detail="Only tournament arbiter or admin can submit results")
 
     match = db.query(models.Match).filter(
         models.Match.match_id == match_id,
@@ -242,6 +243,7 @@ def get_tournament_pairings(
 
 
 @router.post("/{tournament_id}/rounds/{round_number}/finalize")
+@router.post("/{tournament_id}/round/{round_number}/finalize")
 def finalize_round(
     tournament_id: int,
     round_number: int,
@@ -254,9 +256,9 @@ def finalize_round(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can finalize rounds")
+            status_code=403, detail="Only tournament arbiter or admin can finalize rounds")
 
     round_item = db.query(models.Round).filter(
         models.Round.tournament_id == tournament_id,
@@ -264,6 +266,17 @@ def finalize_round(
     ).first()
     if not round_item:
         raise HTTPException(status_code=404, detail="Round not found")
+
+    # Ensure matches exist before finalizing
+    total_matches = db.query(models.Match).filter(
+        models.Match.round_id == round_item.round_id
+    ).count()
+
+    if total_matches == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot finalize Round {round_number}: No pairings exist for this round. Please generate pairings first."
+        )
 
     # Check for incomplete matches
     incomplete_matches = db.query(models.Match).filter(
@@ -278,6 +291,18 @@ def finalize_round(
         )
 
     round_item.is_submitted = True
+
+    # Reset single-round absences for the finalized round
+    db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.is_absent == True,
+        models.TournamentRegistration.absent_round == round_number
+    ).update({
+        "is_absent": False,
+        "status": "approved",
+        "absent_round": None
+    }, synchronize_session=False)
+
     db.commit()
 
     return {"message": f"Round {round_number} finalized successfully", "is_submitted": True}
@@ -383,40 +408,56 @@ def start_pairing_round(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can start pairings")
+            status_code=403, detail="Only tournament arbiter or admin can start pairings")
 
-    if (tournament.current_round or 0) == 0 and tournament.status != "active":
-        raise HTTPException(
-            status_code=400,
-            detail="Tournament must be officially started before generating Round 1 pairings"
-        )
-
-    approved_registrations = db.query(models.TournamentRegistration).filter(
-        models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
+    # Clean up any phantom/empty rounds that have 0 matches in this tournament
+    empty_rounds = db.query(models.Round).filter(
+        models.Round.tournament_id == tournament_id
     ).all()
+    cleaned = False
+    for er in empty_rounds:
+        m_count = db.query(models.Match).filter(models.Match.round_id == er.round_id).count()
+        if m_count == 0:
+            db.delete(er)
+            cleaned = True
+    if cleaned:
+        db.commit()
 
-    if len(approved_registrations) < 2:
-        raise HTTPException(
-            status_code=400, detail="At least 2 approved participants are required")
+    # Determine authoritative next_round based on valid rounds that have matches
+    last_valid_round = db.query(models.Round).filter(
+        models.Round.tournament_id == tournament_id
+    ).order_by(models.Round.round_number.desc()).first()
 
-    next_round = (tournament.current_round or 0) + 1
+    if last_valid_round is None:
+        next_round = 1
+        tournament.current_round = 0
+    else:
+        if not last_valid_round.is_submitted:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Round {last_valid_round.round_number} must be finalized before starting Round {last_valid_round.round_number + 1}."
+            )
+        next_round = last_valid_round.round_number + 1
+
     if tournament.rounds and next_round > tournament.rounds:
         raise HTTPException(
             status_code=400, detail="All configured rounds are already generated")
 
-    if tournament.current_round and tournament.current_round > 0:
-        prev_round = db.query(models.Round).filter(
-            models.Round.tournament_id == tournament_id,
-            models.Round.round_number == tournament.current_round
-        ).first()
-        if prev_round and not prev_round.is_submitted:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Round {tournament.current_round} must be finalized before starting Round {next_round}."
-            )
+    all_registrations = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active", "absent"])
+    ).all()
+
+    active_for_this_round = [
+        r for r in all_registrations
+        if not (r.is_absent and (r.absent_round == next_round or r.absent_round == 0 or r.absent_round is None))
+    ]
+
+    if len(active_for_this_round) < 2:
+        raise HTTPException(
+            status_code=400, detail="At least 2 active participants are required for this round")
 
     round_record = models.Round(
         tournament_id=tournament_id,
@@ -425,8 +466,19 @@ def start_pairing_round(
     db.add(round_record)
     db.flush()
 
-    _generate_pairings_for_round(
-        db, tournament, round_record, approved_registrations)
+    try:
+        _generate_pairings_for_round(
+            db, tournament, round_record, all_registrations)
+    except Exception:
+        db.rollback()
+        raise
+
+    # Clean up any past single-round absences from earlier rounds that finished
+    for reg in all_registrations:
+        if reg.is_absent and reg.absent_round and 0 < reg.absent_round < next_round:
+            reg.is_absent = False
+            reg.status = "approved"
+            reg.absent_round = None
 
     tournament.current_round = next_round
     if tournament.status == "upcoming":
@@ -434,8 +486,8 @@ def start_pairing_round(
 
     db.commit()
 
-    # Notify all players
-    player_ids = [reg.user_id for reg in approved_registrations if reg.user_id]
+    # Notify active players
+    player_ids = [reg.user_id for reg in active_for_this_round if reg.user_id]
     notification_service.notify_round_pairing(
         db, tournament=tournament, round_number=next_round, player_ids=player_ids
     )
@@ -456,9 +508,9 @@ def regenerate_pairing_round(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can regenerate pairings")
+            status_code=403, detail="Only tournament arbiter or admin can regenerate pairings")
 
     if not tournament.current_round or tournament.current_round == 0:
         print(
@@ -482,10 +534,9 @@ def regenerate_pairing_round(
         raise HTTPException(
             status_code=400, detail="Cannot regenerate pairings after round results are submitted")
 
-    # Delete existing matches for this round
+    # Delete existing matches for this round within the transaction
     db.query(models.Match).filter(
         models.Match.round_id == round_item.round_id).delete()
-    db.commit()
 
     # Refresh registrations to clear BYE points if they exist
     # (Actually, points are best recalculated from scratch, but let's be safe)
@@ -499,16 +550,18 @@ def regenerate_pairing_round(
         if entry["user_id"] in reg_map:
             reg_map[entry["user_id"]].current_points = entry["points"]
 
-    db.commit()
-
-    approved_registrations = db.query(models.TournamentRegistration).filter(
+    all_registrations = db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
+        models.TournamentRegistration.status.in_(["approved", "active", "absent"])
     ).all()
 
-    _generate_pairings_for_round(
-        db, tournament, round_item, approved_registrations)
-    db.commit()
+    try:
+        _generate_pairings_for_round(
+            db, tournament, round_item, all_registrations)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {"message": f"Round {tournament.current_round} pairings regenerated successfully"}
 
@@ -524,9 +577,9 @@ def seed_players(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
-            status_code=403, detail="Only tournament creator or admin can seed players")
+            status_code=403, detail="Only tournament arbiter or admin can seed players")
 
     # Create 8 dummy players
     test_players = [
@@ -583,10 +636,10 @@ def check_pairing_integrity(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    if not is_tournament_creator_or_admin(tournament, current_user):
+    if not is_tournament_staff_or_admin(tournament, current_user):
         raise HTTPException(
             status_code=403,
-            detail="Only tournament creator or admin can run pairing checks"
+            detail="Only tournament arbiter or admin can run pairing checks"
         )
 
     if (tournament.pairing_system or "Swiss").lower() != "swiss":
@@ -604,7 +657,8 @@ def check_pairing_integrity(
 
     approved_registrations = db.query(models.TournamentRegistration).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
+        models.TournamentRegistration.status.in_(["approved", "active"]),
+        (models.TournamentRegistration.is_absent == False) | (models.TournamentRegistration.is_absent.is_(None))
     ).all()
 
     if not approved_registrations:
@@ -629,4 +683,232 @@ def check_pairing_integrity(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred during integrity check: {str(e)}"
         )
+
+
+@router.get("/{tournament_id}/absent-players")
+def get_absent_and_active_players(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Swiss-Manager style participant management:
+    Returns categorized lists of active (pairable) and absent (excluded) players for upcoming rounds.
+    """
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id
+    ).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    registrations = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.status.in_(["approved", "active", "absent"])
+    ).all()
+
+    active_players = []
+    absent_players = []
+
+    for reg in registrations:
+        u = reg.user
+        if not u:
+            continue
+        form_data = _decode_form_data(reg.color_history)
+        fallback = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.username
+        display_name = _extract_display_name(form_data, fallback)
+        rating = u.fide_rating or u.national_rating or 0
+
+        is_abs = bool(reg.is_absent or reg.status == "absent")
+        player_dict = {
+            "registration_id": reg.registration_id,
+            "user_id": reg.user_id,
+            "player_name": display_name,
+            "email": u.email,
+            "rating": rating,
+            "seed": reg.seed,
+            "current_points": float(reg.current_points or 0.0),
+            "status": reg.status,
+            "is_absent": is_abs,
+            "absent_round": reg.absent_round,
+            "fide_id": u.fide_id,
+            "country": u.country
+        }
+        if is_abs:
+            absent_players.append(player_dict)
+        else:
+            active_players.append(player_dict)
+
+    # Sort active and absent players by seed / rating
+    active_players.sort(key=lambda p: (p["seed"] is None, p["seed"] or 0, -p["rating"]))
+    absent_players.sort(key=lambda p: (p["seed"] is None, p["seed"] or 0, -p["rating"]))
+
+    last_round = db.query(models.Round).filter(
+        models.Round.tournament_id == tournament_id
+    ).order_by(models.Round.round_number.desc()).first()
+    if not last_round:
+        next_round = 1
+    elif last_round.is_submitted:
+        next_round = last_round.round_number + 1
+    else:
+        next_round = last_round.round_number
+
+    return {
+        "tournament_id": tournament_id,
+        "current_round": tournament.current_round or 0,
+        "next_round": next_round,
+        "active_players": active_players,
+        "absent_players": absent_players
+    }
+
+
+class AbsentPlayerRequest(BaseModel):
+    round_number: Optional[int] = None
+
+
+def _mark_player_absent_impl(
+    tournament_id: int,
+    player_id: int,
+    db: Session,
+    current_user: models.User,
+    round_number: Optional[int] = None
+):
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id
+    ).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if not is_tournament_staff_or_admin(tournament, current_user):
+        raise HTTPException(
+            status_code=403, detail="Only tournament arbiter or admin can manage player participation"
+        )
+
+    registration = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.user_id == player_id
+    ).first()
+
+    if not registration:
+        raise HTTPException(status_code=404, detail="Player registration not found in tournament")
+
+    if round_number is None:
+        last_round = db.query(models.Round).filter(
+            models.Round.tournament_id == tournament_id
+        ).order_by(models.Round.round_number.desc()).first()
+        if not last_round:
+            target_round = 1
+        elif last_round.is_submitted:
+            target_round = last_round.round_number + 1
+        else:
+            target_round = last_round.round_number
+    else:
+        target_round = int(round_number)
+
+    registration.is_absent = True
+    registration.status = "absent"
+    registration.absent_round = target_round
+    db.commit()
+
+    u = registration.user
+    player_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.username if u else f"Player #{player_id}"
+    round_desc = "all remaining rounds" if target_round == 0 else f"Round {target_round} only"
+
+    return {
+        "message": f"Player {player_name} marked as absent for {round_desc}.",
+        "player_id": player_id,
+        "player_name": player_name,
+        "is_absent": True,
+        "absent_round": target_round
+    }
+
+
+def _restore_absent_player_impl(tournament_id: int, player_id: int, db: Session, current_user: models.User):
+    tournament = db.query(models.Tournament).filter(
+        models.Tournament.tournament_id == tournament_id
+    ).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if not is_tournament_staff_or_admin(tournament, current_user):
+        raise HTTPException(
+            status_code=403, detail="Only tournament arbiter or admin can manage player participation"
+        )
+
+    registration = db.query(models.TournamentRegistration).options(
+        joinedload(models.TournamentRegistration.user)
+    ).filter(
+        models.TournamentRegistration.tournament_id == tournament_id,
+        models.TournamentRegistration.user_id == player_id
+    ).first()
+
+    if not registration:
+        raise HTTPException(status_code=404, detail="Player registration not found in tournament")
+
+    registration.is_absent = False
+    registration.status = "approved"
+    registration.absent_round = None
+    db.commit()
+
+    u = registration.user
+    player_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.username if u else f"Player #{player_id}"
+
+    return {
+        "message": f"Player {player_name} restored to active pairing pool.",
+        "player_id": player_id,
+        "player_name": player_name,
+        "is_absent": False,
+        "current_points": float(registration.current_points or 0.0)
+    }
+
+
+@router.post("/{tournament_id}/players/{player_id}/absent")
+def mark_player_absent(
+    tournament_id: int,
+    player_id: int,
+    payload: Optional[AbsentPlayerRequest] = None,
+    round_number: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    target_r = payload.round_number if (payload and payload.round_number is not None) else round_number
+    return _mark_player_absent_impl(tournament_id, player_id, db, current_user, target_r)
+
+
+@router.post("/{tournament_id}/players/{player_id}/restore")
+def restore_absent_player(
+    tournament_id: int,
+    player_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    return _restore_absent_player_impl(tournament_id, player_id, db, current_user)
+
+
+# Also provide the alternate path aliases requested in spec (/api/tournament/{id}/player/{id}/absent)
+@router.post("/api/tournament/{tournament_id}/player/{player_id}/absent")
+def mark_player_absent_alias(
+    tournament_id: int,
+    player_id: int,
+    payload: Optional[AbsentPlayerRequest] = None,
+    round_number: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    target_r = payload.round_number if (payload and payload.round_number is not None) else round_number
+    return _mark_player_absent_impl(tournament_id, player_id, db, current_user, target_r)
+
+
+@router.post("/api/tournament/{tournament_id}/player/{player_id}/restore")
+def restore_absent_player_alias(
+    tournament_id: int,
+    player_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    return _restore_absent_player_impl(tournament_id, player_id, db, current_user)
+
 

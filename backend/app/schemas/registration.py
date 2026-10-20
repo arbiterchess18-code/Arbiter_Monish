@@ -36,11 +36,11 @@ class TournamentRegistrationStatusUpdate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value):
-        allowed = {"pending", "approved", "rejected", "active"}
+        allowed = {"pending", "approved", "rejected", "active", "absent"}
         normalized = (value or "").strip().lower()
         if normalized not in allowed:
             raise ValueError(
-                "Status must be one of: pending, approved, rejected, active")
+                "Status must be one of: pending, approved, rejected, active, absent")
         return normalized
 
 
@@ -55,6 +55,8 @@ class TournamentRegistrationResponse(BaseModel):
     current_points: float
     seed: Optional[int] = None
     player_rating: Optional[int] = 0
+    is_absent: Optional[bool] = False
+    absent_round: Optional[int] = None
     form_data: Dict[str, Any] = {}
 
     class Config:

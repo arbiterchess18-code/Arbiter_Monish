@@ -32,12 +32,12 @@ def calculate_standings(db: Session, tournament_id: int):
     if not tournament:
         return None, []
 
-    # Get all approved registrations
+    # Get all tournament registrations (approved, active, or absent)
     registrations = db.query(models.TournamentRegistration).options(
         joinedload(models.TournamentRegistration.user)
     ).filter(
         models.TournamentRegistration.tournament_id == tournament_id,
-        models.TournamentRegistration.status.in_(["approved", "active"])
+        models.TournamentRegistration.status.in_(["approved", "active", "absent"])
     ).all()
 
     if not registrations:
@@ -65,7 +65,8 @@ def calculate_standings(db: Session, tournament_id: int):
         player_meta[uid] = {
             "seed": reg.seed or 0,
             "user": reg.user,
-            "reg": reg
+            "reg": reg,
+            "is_absent": bool(getattr(reg, "is_absent", False) or reg.status == "absent")
         }
         player_stats[uid]["rating"] = reg.user.fide_rating or reg.user.national_rating or 0
 
@@ -177,6 +178,7 @@ def calculate_standings(db: Session, tournament_id: int):
             "player_name": base_name,
             "rating": stats["rating"],
             "points": stats["points"],
+            "is_absent": meta["is_absent"],
             "tb_map": tb_map,
             "direct_encounter_data": stats["direct_encounter_opponents"]
         })

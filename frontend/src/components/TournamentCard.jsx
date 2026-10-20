@@ -6,10 +6,12 @@ import {
   Trophy,
   Share2,
   CheckCircle2,
+  Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 const statusColors = {
   active: "bg-success/15 text-success border-success/30",
@@ -50,19 +52,44 @@ export function TournamentCard({
   customActions,
   isSubArbiter,
   isParticipating,
+  onClick,
+  onViewDetails,
+  showViewDetails = true,
 }) {
+  const navigate = useNavigate();
   const statusKey = tournament.status || "upcoming";
   const registeredCount = tournament.registered_count ?? tournament.players ?? 0;
   const maxPlayers = tournament.max_players ?? tournament.maxPlayers ?? "--";
   const occupancyPercent = typeof maxPlayers === "number" && maxPlayers > 0 ? Math.min((registeredCount / maxPlayers) * 100, 100) : null;
   const locationLabel = tournament.venue_name ? `${tournament.venue_name}${tournament.city ? `, ${tournament.city}` : ""}` : tournament.location || tournament.city || tournament.mode || "Online";
+  const tournamentId = tournament.tournament_id ?? tournament.id;
+
+  const handleCardClick = (e) => {
+    if (onClick) {
+      onClick(e, tournament);
+    } else if (tournamentId) {
+      navigate(`/tournament/${tournamentId}`);
+    }
+  };
+
+  const handleViewDetailsClick = (e) => {
+    e.stopPropagation();
+    if (onViewDetails) {
+      onViewDetails(tournament);
+    } else if (tournamentId) {
+      navigate(`/tournament/${tournamentId}`);
+    }
+  };
+
+  const canJoin = !hideActions && showJoin && (statusKey === "upcoming" || statusKey === "published") && registeredCount < (tournament.max_players ?? tournament.maxPlayers ?? 999);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.1, type: "spring", stiffness: 100 }}
-      className="group relative flex flex-col h-full overflow-hidden rounded-xl bg-card p-5 sm:p-6 border border-border/60 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border"
+      onClick={handleCardClick}
+      className="group relative flex flex-col h-full overflow-hidden rounded-xl bg-card p-5 sm:p-6 border border-border/60 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/40 cursor-pointer"
     >
       {/* Top Section - Always exactly the same height footprint */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -85,7 +112,7 @@ export function TournamentCard({
             {/* Fixed height container for Title to prevent layout shifting */}
             <div className="h-[3.5rem] sm:h-[4rem] flex items-start w-full">
               <h3 
-                className="font-display text-lg sm:text-xl font-bold tracking-tight leading-snug text-foreground overflow-hidden w-full"
+                className="font-display text-lg sm:text-xl font-bold tracking-tight leading-snug text-foreground overflow-hidden w-full group-hover:text-primary transition-colors"
                 style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}
               >
                 {tournament.name}
@@ -152,27 +179,39 @@ export function TournamentCard({
           )}
         </div>
 
-        {isParticipating ? (
-          <div className="flex items-center justify-center gap-2 rounded-xl bg-success/10 border border-success/20 p-3 text-sm font-bold text-success uppercase tracking-wide">
-            <CheckCircle2 className="h-4 w-4" /> Participating
+        {customActions ? (
+          <div className="grid grid-flow-row grid-cols-2 gap-2 pt-4 border-t border-border/60 mt-1" onClick={(e) => e.stopPropagation()}>
+            {customActions}
           </div>
         ) : (
-          !hideActions && showJoin && (statusKey === "upcoming" || statusKey === "published") && registeredCount < (tournament.max_players ?? tournament.maxPlayers ?? 999) && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onJoin?.(tournament); }}
-              className="w-full flex items-center justify-center h-10 sm:h-11 bg-primary rounded-xl border border-transparent shadow-sm hover:opacity-90 transition-opacity text-primary-foreground font-semibold text-xs sm:text-sm uppercase tracking-wider mt-1"
-            >
-              Join Tournament
-            </button>
-          )
-        )}
+          <div className="flex items-center gap-2 mt-1">
+            {isParticipating ? (
+              <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success/10 border border-success/20 p-2.5 text-xs sm:text-sm font-bold text-success uppercase tracking-wide">
+                <CheckCircle2 className="h-4 w-4" /> Participating
+              </div>
+            ) : canJoin ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onJoin?.(tournament); }}
+                className="flex-1 flex items-center justify-center h-10 sm:h-11 bg-primary rounded-xl border border-transparent shadow-sm hover:opacity-90 transition-opacity text-primary-foreground font-semibold text-xs sm:text-sm uppercase tracking-wider"
+              >
+                Join Tournament
+              </button>
+            ) : null}
 
-        {customActions && (
-          <div className="grid grid-flow-row grid-cols-2 gap-2 pt-4 border-t border-border/60 mt-1">
-            {customActions}
+            {showViewDetails && (
+              <button
+                onClick={handleViewDetailsClick}
+                className={`flex items-center justify-center gap-1.5 h-10 sm:h-11 border border-border bg-background hover:bg-accent hover:text-accent-foreground font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition-colors px-4 ${
+                  !canJoin && !isParticipating ? "w-full" : "flex-1"
+                }`}
+              >
+                <Eye className="h-4 w-4" /> View Details
+              </button>
+            )}
           </div>
         )}
       </div>
     </motion.div>
   );
 }
+

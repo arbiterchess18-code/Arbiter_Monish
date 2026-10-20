@@ -83,7 +83,7 @@ const ArbiterDashboard = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
             {managedTournaments.map((t, i) => (
-              <TournamentCard key={t.id} tournament={t} index={i} />
+              <TournamentCard key={t.id} tournament={t} index={i} showViewDetails />
             ))}
           </div>
         </div>

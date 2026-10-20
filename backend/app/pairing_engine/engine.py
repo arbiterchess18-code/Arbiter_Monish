@@ -34,49 +34,67 @@ def get_fed_code(country: str) -> str:
 
 
 def assign_seeds_if_needed(db: Session, tournament_id: int, approved_registrations: List[models.TournamentRegistration]):
-    needs_seeding = any(reg.seed is None or reg.seed <= 0 for reg in approved_registrations)
-    if needs_seeding:
-        tournament = db.query(models.Tournament).filter(models.Tournament.tournament_id == tournament_id).first()
-        event_type = (tournament.event_type or "Standard").strip().lower() if tournament else "standard"
+    all_regs = db.query(models.TournamentRegistration).filter(
+        models.TournamentRegistration.tournament_id == tournament_id
+    ).all()
 
-        def get_sort_key(reg):
-            user = reg.user
-            if not user:
-                return (0, 8, "", reg.registration_id)
+    existing_seeded = [r for r in all_regs if r.seed is not None and r.seed > 0]
+    unseeded = [r for r in approved_registrations if r.seed is None or r.seed <= 0]
 
-            # Determine primary rating based on event_type (Standard vs. Rapid vs. Blitz)
-            if event_type == "rapid":
-                rating = user.rapid_rating or user.fide_rating or user.national_rating or 0
-            elif event_type == "blitz":
-                rating = user.blitz_rating or user.fide_rating or user.national_rating or 0
-            else:  # standard / classical
-                rating = user.fide_rating or user.national_rating or 0
+    if not unseeded:
+        return
 
-            # Title precedence (GM > IM > WGM > FM > WIM > CM > WCM > None)
-            title = (user.title or "").strip().upper()
-            title_priority = {
-                "GM": 1,
-                "IM": 2,
-                "WGM": 3,
-                "FM": 4,
-                "WIM": 5,
-                "CM": 6,
-                "WCM": 7
-            }
-            title_rank = title_priority.get(title, 8)
+    tournament = db.query(models.Tournament).filter(models.Tournament.tournament_id == tournament_id).first()
+    event_type = (tournament.event_type or "Standard").strip().lower() if tournament else "standard"
 
-            # Alphabetical ordering: Lastname, Firstname
-            last = (user.last_name or "").strip()
-            first = (user.first_name or user.username or "").strip()
-            name_str = f"{last}, {first}" if last else first
-            name_key = name_str.lower()
+    def get_sort_key(reg):
+        user = reg.user
+        if not user:
+            return (0, 8, "", reg.registration_id)
 
-            return (-rating, title_rank, name_key, reg.registration_id)
+        # Determine primary rating based on event_type (Standard vs. Rapid vs. Blitz)
+        if event_type == "rapid":
+            rating = user.rapid_rating or user.fide_rating or user.national_rating or 0
+        elif event_type == "blitz":
+            rating = user.blitz_rating or user.fide_rating or user.national_rating or 0
+        else:  # standard / classical
+            rating = user.fide_rating or user.national_rating or 0
 
-        sorted_regs = sorted(approved_registrations, key=get_sort_key)
+        # Title precedence (GM > IM > WGM > FM > WIM > CM > WCM > None)
+        title = (user.title or "").strip().upper()
+        title_priority = {
+            "GM": 1,
+            "IM": 2,
+            "WGM": 3,
+            "FM": 4,
+            "WIM": 5,
+            "CM": 6,
+            "WCM": 7
+        }
+        title_rank = title_priority.get(title, 8)
+
+        # Alphabetical ordering: Lastname, Firstname
+        last = (user.last_name or "").strip()
+        first = (user.first_name or user.username or "").strip()
+        name_str = f"{last}, {first}" if last else first
+        name_key = name_str.lower()
+
+        return (-rating, title_rank, name_key, reg.registration_id)
+
+    if not existing_seeded:
+        # Initial seeding: Seed all registered tournament participants
+        target_regs = all_regs if all_regs else approved_registrations
+        sorted_regs = sorted(target_regs, key=get_sort_key)
         for idx, reg in enumerate(sorted_regs, start=1):
             reg.seed = idx
-        db.commit()
+    else:
+        # Incremental seeding: Keep existing seeds, assign next numbers to unseeded returning/late players
+        max_seed = max((r.seed for r in existing_seeded), default=0)
+        sorted_unseeded = sorted(unseeded, key=get_sort_key)
+        for idx, reg in enumerate(sorted_unseeded, start=max_seed + 1):
+            reg.seed = idx
+
+    db.commit()
 
 
 def build_trfx(tournament: models.Tournament, round_number: int, registrations: List[models.TournamentRegistration], db: Session) -> str:
@@ -170,36 +188,38 @@ def build_trfx(tournament: models.Tournament, round_number: int, registrations: 
 
     for idx, reg in enumerate(sorted_players, start=1):
         user = reg.user
+        if not user and reg.user_id:
+            user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
         
         # Gender
-        gender = (user.gender or "").strip().lower()
+        gender = ((user.gender if user else "") or "").strip().lower()
         gender_char = "w" if gender.startswith("f") or gender.startswith("w") else ("m" if gender.startswith("m") else " ")
         
         # Title
-        title = (user.title or "").strip().upper()
+        title = ((user.title if user else "") or "").strip().upper()
         title_str = title[:3].ljust(3)
         
         # Name (Format: Lastname, Firstname - max 33 characters)
-        last = (user.last_name or "").strip()
-        first = (user.first_name or user.username or "").strip()
+        last = ((user.last_name if user else "") or "").strip()
+        first = ((user.first_name if user else (user.username if user else f"Player {reg.seed}")) or "").strip()
         name_str = f"{last}, {first}" if last else first
         
         # Rating (FIDE rating or online/national based on event type)
-        if event_type == "rapid":
-            rating_val = user.rapid_rating or user.fide_rating or user.national_rating or 0
-        elif event_type == "blitz":
-            rating_val = user.blitz_rating or user.fide_rating or user.national_rating or 0
-        else:  # standard / classical
-            rating_val = user.fide_rating or user.national_rating or 0
-        
-        # Federation
-        fed_str = get_fed_code(user.country)
-        
-        # FIDE ID
-        fide_id_str = f"{str(user.fide_id or ''):<11s}"
-        
-        # Birth date
-        birth_date_str = user.date_of_birth.strftime("%Y/%m/%d") if user.date_of_birth else "          "
+        if user:
+            if event_type == "rapid":
+                rating_val = user.rapid_rating or user.fide_rating or user.national_rating or 0
+            elif event_type == "blitz":
+                rating_val = user.blitz_rating or user.fide_rating or user.national_rating or 0
+            else:  # standard / classical
+                rating_val = user.fide_rating or user.national_rating or 0
+            fed_str = get_fed_code(user.country)
+            fide_id_str = f"{str(user.fide_id or ''):<11s}"
+            birth_date_str = user.date_of_birth.strftime("%Y/%m/%d") if user.date_of_birth else "          "
+        else:
+            rating_val = 0
+            fed_str = "   "
+            fide_id_str = "           "
+            birth_date_str = "          "
         
         # Calculate points based on history map to be completely fresh
         points_val = 0.0
@@ -239,6 +259,18 @@ def build_trfx(tournament: models.Tournament, round_number: int, registrations: 
             else:
                 # Fallback: player was unpaired/absent in this round
                 round_blocks.append("0000 - -  ")
+
+        # For the round currently being paired (round_number):
+        # If player is absent for this specific round, append unplayed block so JaVaFo excludes them
+        is_absent_this_round = bool(
+            reg.is_absent and (
+                reg.absent_round == round_number or
+                reg.absent_round == 0 or
+                reg.absent_round is None
+            )
+        )
+        if is_absent_this_round:
+            round_blocks.append("0000 - -  ")
 
         line += "".join(round_blocks)
         player_lines.append(line.rstrip())

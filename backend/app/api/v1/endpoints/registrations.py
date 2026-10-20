@@ -253,6 +253,8 @@ def register_for_tournament(
         "current_points": float(new_registration.current_points or 0),
         "seed": new_registration.seed,
         "player_rating": target_user_model.fide_rating or target_user_model.national_rating or 0,
+        "is_absent": bool(new_registration.is_absent or new_registration.status == "absent"),
+        "absent_round": new_registration.absent_round,
         "form_data": form_data,
     }
 
@@ -280,7 +282,7 @@ def get_tournament_registrations(
 
     if not is_privileged:
         query = query.filter(
-            models.TournamentRegistration.status.in_(["approved", "active"])
+            models.TournamentRegistration.status.in_(["approved", "active", "absent"])
         )
 
     registrations = query.order_by(
@@ -304,6 +306,8 @@ def get_tournament_registrations(
             "current_points": float(registration.current_points or 0),
             "seed": registration.seed,
             "player_rating": user.fide_rating or user.national_rating or 0,
+            "is_absent": bool(registration.is_absent or registration.status == "absent"),
+            "absent_round": registration.absent_round,
             "form_data": form_data,
         })
     return response
@@ -371,6 +375,8 @@ def update_registration_status(
         "current_points": float(registration.current_points or 0),
         "seed": registration.seed,
         "player_rating": user.fide_rating or user.national_rating or 0,
+        "is_absent": bool(registration.is_absent or registration.status == "absent"),
+        "absent_round": registration.absent_round,
         "form_data": form_data,
     }
 

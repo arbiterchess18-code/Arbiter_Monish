@@ -217,6 +217,7 @@ export default function OrbiterPlayingDashboard() {
               index={i}
               showJoin
               onJoin={setJoinTournament}
+              showViewDetails
             />
           ))}
         </div>

@@ -15,7 +15,9 @@ import {
   X,
   ShieldAlert,
   Sliders,
+  UserX,
 } from "lucide-react";
+import { ManageAbsentPlayersDialog } from "./ManageAbsentPlayersDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -69,6 +71,7 @@ export function PairingSettingsFloatingButton({
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [showAbsentModal, setShowAbsentModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Auto refresh timer
@@ -107,7 +110,11 @@ export function PairingSettingsFloatingButton({
       : []),
 
     // 2. Generate Next Round
-    ...(isArbiter && tournament?.status === "active" && actualCurrentRound < (tournament?.rounds || 100)
+    ...(isArbiter &&
+    (tournament?.status === "active" ||
+      tournament?.status === "upcoming" ||
+      tournament?.status === "published") &&
+    actualCurrentRound < (tournament?.rounds || 100)
       ? [
           {
             id: "generate",
@@ -143,9 +150,14 @@ export function PairingSettingsFloatingButton({
               : incompleteMatches === 0
                 ? "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/20"
                 : "text-amber-400 hover:text-amber-300 hover:bg-amber-400/20",
-            disabled: isSelectedRoundSubmitted || incompleteMatches > 0 || generatingPairings,
+            disabled:
+              isSelectedRoundSubmitted ||
+              incompleteMatches > 0 ||
+              generatingPairings ||
+              (tournament?.pairings?.filter((p) => p.round_number === selectedRound) || []).length === 0,
             onClick: () => {
-              if (!isSelectedRoundSubmitted && incompleteMatches === 0 && !generatingPairings) {
+              const roundPairings = tournament?.pairings?.filter((p) => p.round_number === selectedRound) || [];
+              if (!isSelectedRoundSubmitted && incompleteMatches === 0 && !generatingPairings && roundPairings.length > 0) {
                 setShowFinalizeConfirm(true);
               }
             },
@@ -154,7 +166,10 @@ export function PairingSettingsFloatingButton({
       : []),
 
     // 4. Regenerate Pairings
-    ...(permissions?.canRegeneratePairings && !isCurrentRoundSubmitted && incompleteMatches > 0
+    ...(permissions?.canRegeneratePairings &&
+    actualCurrentRound > 0 &&
+    !isCurrentRoundSubmitted &&
+    incompleteMatches > 0
       ? [
           {
             id: "regenerate",
@@ -162,6 +177,22 @@ export function PairingSettingsFloatingButton({
             icon: RotateCcw,
             color: "text-rose-400 hover:text-rose-300 hover:bg-rose-400/20",
             onClick: () => setShowRegenerateConfirm(true),
+          },
+        ]
+      : []),
+
+    // Manage Absent Players (Swiss-Manager Exclusion/Restoration)
+    ...(isArbiter
+      ? [
+          {
+            id: "manage_absent",
+            label: "Manage Absent Players",
+            icon: UserX,
+            color: "text-amber-400 hover:text-amber-300 hover:bg-amber-400/20",
+            onClick: () => {
+              setIsOpen(false);
+              setShowAbsentModal(true);
+            },
           },
         ]
       : []),
@@ -422,6 +453,17 @@ export function PairingSettingsFloatingButton({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 5. Manage Absent Players Dialog */}
+      {showAbsentModal && (
+        <ManageAbsentPlayersDialog
+          isOpen={showAbsentModal}
+          onClose={() => setShowAbsentModal(false)}
+          tournamentId={tournament?.tournament_id || tournament?.id}
+          currentRound={actualCurrentRound}
+          onStatusChanged={onRefresh}
+        />
+      )}
     </TooltipProvider>
   );
 }
